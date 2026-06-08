@@ -145,12 +145,17 @@ tasks.register('assembleManualDebug', Exec) {
     commandLine 'python3', 'tools/build_manual_apk.py', '--output', 'app/build/outputs/apk/debug/app-debug.apk'
 }
 
+tasks.register('assembleManualRelease', Exec) {
+    group = 'build'
+    description = 'Builds a tiny signed release-named APK using the offline fallback builder.'
+    workingDir rootProject.projectDir
+    commandLine 'python3', 'tools/build_manual_apk.py', '--output', 'app/build/outputs/apk/release/app-release.apk'
+}
+
 if (ipindouUseManualApk) {
-    tasks.register('assembleDebug') {
-        group = 'build'
-        description = 'Builds a signed debug APK with the offline fallback builder when Android SDK/AGP is unavailable.'
-        dependsOn tasks.named('assembleManualDebug')
-        doFirst {
+    def configureManualFallbackTask = { Task task ->
+        task.group = 'build'
+        task.doFirst {
             if (ipindouForceManualApk) {
                 logger.lifecycle('Using iPinDou manual APK fallback because ipindou.forceManualApk/IPINDOU_FORCE_MANUAL_APK was set.')
             } else if (ipindouAndroidSdkDir == null || ipindouCompileSdk == null) {
@@ -159,6 +164,18 @@ if (ipindouUseManualApk) {
                 logger.lifecycle("Using iPinDou manual APK fallback because Android Gradle Plugin ${ipindouAgpVersion} is not cached and could not be reached.")
             }
         }
+    }
+
+    tasks.register('assembleDebug') {
+        description = 'Builds a signed debug APK with the offline fallback builder when Android SDK/AGP is unavailable.'
+        dependsOn tasks.named('assembleManualDebug')
+        configureManualFallbackTask(it)
+    }
+
+    tasks.register('assembleRelease') {
+        description = 'Builds a signed release-named APK with the offline fallback builder when Android SDK/AGP is unavailable.'
+        dependsOn tasks.named('assembleManualRelease')
+        configureManualFallbackTask(it)
     }
 } else {
     apply plugin: 'com.android.application'
@@ -177,7 +194,7 @@ if (ipindouUseManualApk) {
     }
 
     tasks.configureEach { task ->
-        if (task.name == 'assembleDebug') {
+        if (task.name in ['assembleDebug', 'assembleRelease']) {
             task.doFirst {
                 logger.lifecycle("Building the full iPinDou Android app with Android SDK ${ipindouAndroidSdkDir} and compileSdk ${ipindouCompileSdk}.")
             }

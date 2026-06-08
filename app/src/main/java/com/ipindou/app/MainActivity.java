@@ -78,7 +78,6 @@ public class MainActivity extends Activity {
         toolbar.addView(button("保存图纸", v -> generatePattern(true)));
         toolbar.addView(button("水平镜像", v -> mirrorHorizontal()));
         toolbar.addView(button("垂直镜像", v -> mirrorVertical()));
-        toolbar.addView(button("导出PNG", v -> exportPattern()));
 
         LinearLayout settings = new LinearLayout(this);
         settings.setGravity(Gravity.CENTER);
@@ -253,9 +252,6 @@ public class MainActivity extends Activity {
         Toast.makeText(this, "描边色：" + color.code + " " + color.name, Toast.LENGTH_SHORT).show();
     }
 
-    private void exportPattern() {
-        saveCurrentPattern("已导出到图库");
-    }
 
     private void saveCurrentPattern(String successPrefix) {
         if (!hasWritePermission()) {

@@ -24,11 +24,11 @@ jobs:
       with:
         gradle-version: '8.14.4'
 
-    - name: Build debug APK with Gradle
-      run: gradle :app:assembleDebug --warning-mode all
+    - name: Build release APK with Gradle
+      run: gradle :app:assembleRelease --warning-mode all
 
-    - name: Upload debug APK
+    - name: Upload release APK
       uses: actions/upload-artifact@v6
       with:
-        name: app-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+        name: app-release-apk
+        path: app/build/outputs/apk/release/*.apk

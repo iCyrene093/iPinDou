@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build a tiny launchable debug APK without downloading Android SDK/AGP.
+"""Build a tiny launchable APK without downloading Android SDK/AGP.
 
-This is an offline fallback for restricted CI sandboxes.  The normal source tree still
+This is an offline fallback for restricted CI sandboxes. The normal source tree still
 contains the native Android implementation; this builder creates a minimal APK with a
-single Activity so `gradle :app:assembleDebug` can produce an installable artifact.
+single Activity so Gradle fallback assemble tasks can produce installable artifacts.
 """
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ class DexBuilder:
         set_text = self.m(textview, p_set_text, 'setText')
         set_size = self.m(textview, p_set_size, 'setTextSize')
         set_content = self.m(activity, p_set_content, 'setContentView')
-        message_text = 'iPinDou 拼豆图纸工具\n\nAPK 已离线构建完成。源代码包含：图片导入、去背景、颜色代码图纸、手动编辑、镜像反转、PNG 导出和用量统计。\n\n请在具备 Android SDK 的环境中使用完整源码构建生产版。'
+        message_text = 'iPinDou 拼豆图纸工具\n\nAPK 已离线构建完成。源代码包含：图片导入、去背景、颜色代码图纸、手动编辑、镜像反转、PNG 图纸保存和用量统计。\n\n请在具备 Android SDK 的环境中使用完整源码构建生产版。'
         self.s(message_text)
         self.s('MainActivity.java')
 
