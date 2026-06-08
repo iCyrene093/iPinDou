@@ -2,13 +2,16 @@ package com.ipindou.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
@@ -24,6 +27,7 @@ import com.ipindou.app.core.BeadPalette;
 import com.ipindou.app.core.BeadPattern;
 import com.ipindou.app.core.PatternGenerator;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -150,10 +154,38 @@ public class MainActivity extends Activity {
         try {
             Bitmap out = renderPatternBitmap(p, 64);
             String name = "ipindou_" + System.currentTimeMillis() + ".png";
-            Uri uri = MediaStore.Images.Media.insertImage(getContentResolver(), out, name, "iPinDou bead pattern");
+            Uri uri = savePatternBitmap(out, name);
             if (uri == null) throw new IllegalStateException("系统图库拒绝写入");
             Toast.makeText(this, "已导出到图库：" + name, Toast.LENGTH_LONG).show();
         } catch (Exception e) { showError("导出失败：" + e.getMessage()); }
+    }
+
+    private Uri savePatternBitmap(Bitmap bitmap, String name) throws Exception {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/iPinDou");
+            values.put(MediaStore.Images.Media.IS_PENDING, 1);
+        }
+
+        Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) return null;
+
+        boolean success = false;
+        try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+            if (out == null) throw new IllegalStateException("无法打开图库输出流");
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) throw new IllegalStateException("PNG 编码失败");
+            success = true;
+        } finally {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues pending = new ContentValues();
+                pending.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(uri, pending, null, null);
+            }
+            if (!success) getContentResolver().delete(uri, null, null);
+        }
+        return uri;
     }
 
     private Bitmap renderPatternBitmap(BeadPattern p, int cell) {
