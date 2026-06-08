@@ -1,0 +1,11 @@
+tasks.register('assembleDebug', Exec) {
+    group = 'build'
+    description = 'Builds a signed debug APK using the offline fallback builder.'
+    workingDir rootProject.projectDir
+    commandLine 'python3', 'tools/build_manual_apk.py', '--output', 'app/build/outputs/apk/debug/app-debug.apk'
+}
+
+tasks.register('clean', Delete) {
+    group = 'build'
+    delete layout.buildDirectory
+}
