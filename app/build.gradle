@@ -176,9 +176,11 @@ if (ipindouUseManualApk) {
         }
     }
 
-    tasks.named('assembleDebug') {
-        doFirst {
-            logger.lifecycle("Building the full iPinDou Android app with Android SDK ${ipindouAndroidSdkDir} and compileSdk ${ipindouCompileSdk}.")
+    tasks.configureEach { task ->
+        if (task.name == 'assembleDebug') {
+            task.doFirst {
+                logger.lifecycle("Building the full iPinDou Android app with Android SDK ${ipindouAndroidSdkDir} and compileSdk ${ipindouCompileSdk}.")
+            }
         }
     }
 }
