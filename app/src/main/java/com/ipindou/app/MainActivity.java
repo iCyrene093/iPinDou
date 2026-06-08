@@ -1,9 +1,11 @@
 package com.ipindou.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -32,18 +34,20 @@ import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final int OPEN_IMAGE = 1001;
+    private static final int WRITE_STORAGE = 1002;
     private PatternView patternView;
     private TextView stats;
     private EditText widthInput;
     private EditText heightInput;
     private CheckBox removeBackground;
     private Bitmap sourceBitmap;
-    private int selectedColorIndex = 12;
+    private String pendingSaveMessage;
+    private int selectedColorIndex = BeadPalette.nearestOpaqueIndex(0xff000000);
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(buildUi());
-        patternView.setPattern(new BeadPattern(29, 29));
+        patternView.setPattern(blankPattern(29, 29));
         updateStats();
     }
 
@@ -63,7 +67,7 @@ public class MainActivity extends Activity {
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         root.addView(toolbar);
         toolbar.addView(button("导入图片", v -> openImagePicker()));
-        toolbar.addView(button("生成图纸", v -> generatePattern()));
+        toolbar.addView(button("生成并保存图纸", v -> generatePattern(true)));
         toolbar.addView(button("水平镜像", v -> mirrorHorizontal()));
         toolbar.addView(button("垂直镜像", v -> mirrorVertical()));
         toolbar.addView(button("导出PNG", v -> exportPattern()));
@@ -123,17 +127,18 @@ public class MainActivity extends Activity {
         if (requestCode == OPEN_IMAGE && resultCode == RESULT_OK && data != null) {
             try (InputStream in = getContentResolver().openInputStream(data.getData())) {
                 sourceBitmap = BitmapFactory.decodeStream(in);
-                generatePattern();
+                generatePattern(false);
             } catch (Exception e) { showError("导入失败：" + e.getMessage()); }
         }
     }
 
-    private void generatePattern() {
+    private void generatePattern(boolean saveAfterGenerate) {
         int w = parseSize(widthInput, 29), h = parseSize(heightInput, 29);
         if (sourceBitmap == null) {
-            patternView.setPattern(new BeadPattern(w, h));
+            patternView.setPattern(blankPattern(w, h));
             updateStats();
-            Toast.makeText(this, "已生成空白 " + w + "x" + h + " 图纸，可直接手绘或先导入图片。", Toast.LENGTH_LONG).show();
+            if (saveAfterGenerate) saveCurrentPattern("已生成并保存空白 " + w + "x" + h + " 图纸。");
+            else Toast.makeText(this, "已生成空白 " + w + "x" + h + " 图纸，可直接手绘或先导入图片。", Toast.LENGTH_LONG).show();
             return;
         }
         Bitmap scaled = sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
@@ -141,7 +146,14 @@ public class MainActivity extends Activity {
         scaled.getPixels(pixels, 0, scaled.getWidth(), 0, 0, scaled.getWidth(), scaled.getHeight());
         patternView.setPattern(PatternGenerator.fromPixels(pixels, scaled.getWidth(), scaled.getHeight(), w, h, removeBackground.isChecked()));
         updateStats();
-        Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
+        if (saveAfterGenerate) saveCurrentPattern("已生成并保存 " + w + "x" + h + " 图纸。");
+        else Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
+    }
+
+    private BeadPattern blankPattern(int width, int height) {
+        BeadPattern pattern = new BeadPattern(width, height);
+        pattern.fill(BeadPalette.nearestOpaqueIndex(0xffffffff));
+        return pattern;
     }
 
     private int parseSize(EditText input, int fallback) {
@@ -152,6 +164,15 @@ public class MainActivity extends Activity {
     private void mirrorVertical() { BeadPattern p = patternView.getPattern(); if (p != null) { patternView.setPattern(p.mirroredVertical()); updateStats(); } }
 
     private void exportPattern() {
+        saveCurrentPattern("已导出到图库");
+    }
+
+    private void saveCurrentPattern(String successPrefix) {
+        if (!hasWritePermission()) {
+            pendingSaveMessage = successPrefix;
+            requestPermissions(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, WRITE_STORAGE);
+            return;
+        }
         BeadPattern p = patternView.getPattern();
         if (p == null) return;
         try {
@@ -159,8 +180,26 @@ public class MainActivity extends Activity {
             String name = "ipindou_" + System.currentTimeMillis() + ".png";
             Uri uri = savePatternBitmap(out, name);
             if (uri == null) throw new IllegalStateException("系统图库拒绝写入");
-            Toast.makeText(this, "已导出到图库：" + name, Toast.LENGTH_LONG).show();
-        } catch (Exception e) { showError("导出失败：" + e.getMessage()); }
+            Toast.makeText(this, successPrefix + "：" + name, Toast.LENGTH_LONG).show();
+        } catch (Exception e) { showError("保存失败：" + e.getMessage()); }
+    }
+
+    private boolean hasWritePermission() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == WRITE_STORAGE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pendingSaveMessage != null) {
+                String message = pendingSaveMessage;
+                pendingSaveMessage = null;
+                saveCurrentPattern(message);
+            } else {
+                pendingSaveMessage = null;
+                showError("保存失败：需要存储权限才能写入系统图库");
+            }
+        }
     }
 
     private Uri savePatternBitmap(Bitmap bitmap, String name) throws Exception {
