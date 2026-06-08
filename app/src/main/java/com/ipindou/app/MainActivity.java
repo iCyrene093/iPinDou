@@ -502,16 +502,27 @@ public class MainActivity extends Activity {
                     String name = "ipindou_" + System.currentTimeMillis() + ".png";
                     Uri uri = savePatternBitmap(out, name);
                     if (uri == null) throw new IllegalStateException("系统图库拒绝写入");
-                    mainHandler.post(() -> Toast.makeText(this, successPrefix + "：" + name, Toast.LENGTH_LONG).show());
+                    postIfActivityActive(() -> Toast.makeText(this, successPrefix + "：" + name, Toast.LENGTH_LONG).show());
                 } catch (OutOfMemoryError e) {
-                    mainHandler.post(() -> showError("保存失败：图纸过大，请降低尺寸后重试"));
+                    postIfActivityActive(() -> showError("保存失败：图纸过大，请降低尺寸后重试"));
                 } catch (Exception e) {
-                    mainHandler.post(() -> showError("保存失败：" + e.getMessage()));
+                    postIfActivityActive(() -> showError("保存失败：" + e.getMessage()));
                 } finally {
                     if (out != null && !out.isRecycled()) out.recycle();
                 }
             });
         } catch (Exception e) { showError("保存失败：" + e.getMessage()); }
+    }
+
+    private void postIfActivityActive(Runnable action) {
+        mainHandler.post(() -> {
+            if (isActivityInactive()) return;
+            action.run();
+        });
+    }
+
+    private boolean isActivityInactive() {
+        return isFinishing() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed());
     }
 
     private int exportCellSize(BeadPattern pattern) {
@@ -682,5 +693,8 @@ public class MainActivity extends Activity {
         stats.setText(s.toString());
     }
 
-    private void showError(String message) { new AlertDialog.Builder(this).setTitle("iPinDou").setMessage(message).setPositiveButton("知道了", null).show(); }
+    private void showError(String message) {
+        if (isActivityInactive()) return;
+        new AlertDialog.Builder(this).setTitle("iPinDou").setMessage(message).setPositiveButton("知道了", null).show();
+    }
 }
