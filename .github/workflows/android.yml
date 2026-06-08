@@ -44,7 +44,14 @@ jobs:
         echo "$android_home/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
         echo "$android_home/platform-tools" >> "$GITHUB_PATH"
 
-        yes | "$sdkmanager_bin" --licenses >/dev/null
+        set +o pipefail
+        yes 2>/dev/null | "$sdkmanager_bin" --licenses >/dev/null
+        license_status="${PIPESTATUS[1]}"
+        set -o pipefail
+        if [ "$license_status" -ne 0 ]; then
+          exit "$license_status"
+        fi
+
         "$sdkmanager_bin" 'platforms;android-35' 'build-tools;35.0.0'
 
     - name: Set up Gradle
