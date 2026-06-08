@@ -19,11 +19,18 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Set up Android SDK
-      uses: android-actions/setup-android@v3
+    - name: Configure Android SDK
+      shell: bash
+      run: |
+        set -euo pipefail
 
-    - name: Install Android platform
-      run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        if ! command -v sdkmanager >/dev/null 2>&1; then
+          echo "sdkmanager was not found on PATH. Ensure the GitHub-hosted Android SDK is available." >&2
+          exit 1
+        fi
+
+        yes | sdkmanager --licenses >/dev/null
+        sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
     - name: Set up Gradle
       uses: gradle/actions/setup-gradle@v6
