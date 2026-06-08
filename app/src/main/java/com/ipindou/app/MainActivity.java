@@ -10,6 +10,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.os.Handler;
+import android.os.Looper;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -35,6 +37,8 @@ import com.ipindou.app.core.PatternGenerator;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int OPEN_IMAGE = 1001;
@@ -48,6 +52,9 @@ public class MainActivity extends Activity {
     private Button outlineColorButton;
     private Bitmap sourceBitmap;
     private String pendingSaveMessage;
+    private final ExecutorService generatorExecutor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private int generationToken = 0;
     private int selectedColorIndex = BeadPalette.nearestOpaqueIndex(0xff000000);
     private int outlineColorIndex = BeadPalette.nearestOpaqueIndex(0xff000000);
 
@@ -75,7 +82,8 @@ public class MainActivity extends Activity {
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         root.addView(horizontalScroll(toolbar));
         toolbar.addView(button("导入图片", v -> openImagePicker()));
-        toolbar.addView(button("保存图纸", v -> generatePattern(true)));
+        toolbar.addView(button("生成图纸", v -> generatePattern(false)));
+        toolbar.addView(button("保存图纸", v -> saveCurrentPattern("已保存图纸")));
         toolbar.addView(button("水平镜像", v -> mirrorHorizontal()));
         toolbar.addView(button("垂直镜像", v -> mirrorVertical()));
         toolbar.addView(button("导出PNG", v -> exportPattern()));
@@ -172,11 +180,64 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == OPEN_IMAGE && resultCode == RESULT_OK && data != null) {
-            try (InputStream in = getContentResolver().openInputStream(data.getData())) {
-                sourceBitmap = BitmapFactory.decodeStream(in);
-                generatePattern(false);
-            } catch (Exception e) { showError("导入失败：" + e.getMessage()); }
+            Uri imageUri = data.getData();
+            if (imageUri == null) {
+                showError("导入失败：未选择图片");
+                return;
+            }
+            final int beadWidth = parseSize(widthInput, 29);
+            final int beadHeight = parseSize(heightInput, 29);
+            final int token = ++generationToken;
+            Toast.makeText(this, "正在导入图片…", Toast.LENGTH_SHORT).show();
+            generatorExecutor.execute(() -> {
+                try {
+                    Bitmap decoded = decodeSampledBitmap(imageUri, beadWidth, beadHeight);
+                    mainHandler.post(() -> {
+                        if (token != generationToken) { decoded.recycle(); return; }
+                        sourceBitmap = decoded;
+                        generatePattern(false);
+                    });
+                } catch (Exception e) {
+                    mainHandler.post(() -> {
+                        if (token == generationToken) showError("导入失败：" + e.getMessage());
+                    });
+                }
+            });
         }
+    }
+
+    private Bitmap decodeSampledBitmap(Uri uri, int beadWidth, int beadHeight) throws Exception {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            BitmapFactory.decodeStream(in, null, bounds);
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new IllegalArgumentException("无法读取图片尺寸");
+
+        int maxDecodeWidth = Math.max(512, Math.min(2048, beadWidth * 16));
+        int maxDecodeHeight = Math.max(512, Math.min(2048, beadHeight * 16));
+        BitmapFactory.Options decode = new BitmapFactory.Options();
+        decode.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        decode.inSampleSize = calculateInSampleSize(bounds.outWidth, bounds.outHeight, maxDecodeWidth, maxDecodeHeight);
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            Bitmap bitmap = BitmapFactory.decodeStream(in, null, decode);
+            if (bitmap == null) throw new IllegalArgumentException("图片解码失败");
+            return bitmap;
+        }
+    }
+
+    private int calculateInSampleSize(int width, int height, int reqWidth, int reqHeight) {
+        int inSampleSize = 1;
+        while (width / (inSampleSize * 2) >= reqWidth && height / (inSampleSize * 2) >= reqHeight) {
+            inSampleSize *= 2;
+        }
+        return inSampleSize;
+    }
+
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        generationToken++;
+        generatorExecutor.shutdownNow();
     }
 
     private void generatePattern(boolean saveAfterGenerate) {
@@ -192,15 +253,31 @@ public class MainActivity extends Activity {
             else if (!silentPreview) Toast.makeText(this, "已生成空白 " + w + "x" + h + " 图纸，可直接手绘或先导入图片。", Toast.LENGTH_LONG).show();
             return;
         }
-        Bitmap scaled = sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
-        int[] pixels = new int[scaled.getWidth() * scaled.getHeight()];
-        scaled.getPixels(pixels, 0, scaled.getWidth(), 0, 0, scaled.getWidth(), scaled.getHeight());
-        BeadPattern generated = PatternGenerator.fromPixels(pixels, scaled.getWidth(), scaled.getHeight(), w, h, removeBackground.isChecked());
-        if (outlineEnabled.isChecked()) generated = PatternGenerator.withOutline(generated, outlineColorIndex);
-        patternView.setPattern(generated);
-        updateStats();
-        if (saveAfterGenerate) saveCurrentPattern("已生成并保存 " + w + "x" + h + " 图纸。");
-        else if (!silentPreview) Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
+        final Bitmap bitmap = sourceBitmap;
+        final boolean removeBg = removeBackground.isChecked();
+        final boolean addOutline = outlineEnabled.isChecked();
+        final int outlineIndex = outlineColorIndex;
+        final int token = ++generationToken;
+        if (!silentPreview) Toast.makeText(this, "正在生成 " + w + "x" + h + " 图纸…", Toast.LENGTH_SHORT).show();
+        generatorExecutor.execute(() -> {
+            try {
+                int[] pixels = new int[bitmap.getWidth() * bitmap.getHeight()];
+                bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+                BeadPattern generated = PatternGenerator.fromPixels(pixels, bitmap.getWidth(), bitmap.getHeight(), w, h, removeBg);
+                final BeadPattern result = addOutline ? PatternGenerator.withOutline(generated, outlineIndex) : generated;
+                mainHandler.post(() -> {
+                    if (token != generationToken) return;
+                    patternView.setPattern(result);
+                    updateStats();
+                    if (saveAfterGenerate) saveCurrentPattern("已生成并保存 " + w + "x" + h + " 图纸。");
+                    else if (!silentPreview) Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    if (token == generationToken) showError("生成失败：" + e.getMessage());
+                });
+            }
+        });
     }
 
     private BeadPattern blankPattern(int width, int height) {
@@ -222,12 +299,13 @@ public class MainActivity extends Activity {
 
     private void showOutlineColorPicker() {
         BeadColor[] colors = BeadPalette.colors();
-        String[] names = new String[colors.length - 1];
-        int[] indexes = new int[colors.length - 1];
+        int colorCount = BeadPalette.standardColorCount();
+        String[] names = new String[colorCount];
+        int[] indexes = new int[colorCount];
         int selected = 0;
-        for (int i = 1; i < colors.length; i++) {
+        for (int i = 0; i < colorCount; i++) {
             BeadColor color = colors[i];
-            int item = i - 1;
+            int item = i;
             indexes[item] = i;
             names[item] = color.code + "  " + color.name;
             if (i == outlineColorIndex) selected = item;
@@ -423,11 +501,16 @@ public class MainActivity extends Activity {
     private void updateStats() {
         BeadPattern p = patternView.getPattern();
         if (p == null || stats == null) return;
-        StringBuilder s = new StringBuilder(String.format(Locale.US, "尺寸：%d x %d，共 %d 颗。用量：", p.width, p.height, p.width * p.height));
+        int transparent = BeadPalette.transparentIndex();
+        int beadCount = p.nonTransparentCount();
+        StringBuilder s = new StringBuilder(String.format(Locale.US, "尺寸：%d x %d，共 %d 颗。用量：", p.width, p.height, beadCount));
         for (int i = 0; i < BeadPalette.colors().length; i++) {
+            if (i == transparent) continue;
             int count = p.countOf(i);
             if (count > 0) s.append(BeadPalette.colorAt(i).code).append('=').append(count).append(' ');
         }
+        int emptyCount = p.countOf(transparent);
+        if (emptyCount > 0) s.append("空格=").append(emptyCount);
         stats.setText(s.toString());
     }
 

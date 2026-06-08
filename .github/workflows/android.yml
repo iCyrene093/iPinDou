@@ -19,13 +19,24 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install Android platform
+      run: sdkmanager 'platforms;android-35'
+
     - name: Set up Gradle
       uses: gradle/actions/setup-gradle@v6
       with:
         gradle-version: '8.14.4'
 
-    - name: Build debug APK with Gradle
+    - name: Run core JVM tests
+      run: gradle :app:testCoreJava --warning-mode all
+
+    - name: Build debug APK with Android toolchain
       run: gradle :app:assembleDebug --warning-mode all
+      env:
+        IPINDOU_FORCE_ANDROID_BUILD: 'true'
 
     - name: Upload debug APK
       uses: actions/upload-artifact@v6
