@@ -2,18 +2,19 @@ package com.ipindou.app.core;
 
 public final class BeadPalette {
     private static final BeadColor[] COLORS = new BeadColor[] {
-        new BeadColor("01", "White", 0xFFFFFFFF), new BeadColor("02", "Cream", 0xFFFFF4D6),
-        new BeadColor("03", "Yellow", 0xFFFFD500), new BeadColor("04", "Orange", 0xFFFF8A00),
-        new BeadColor("05", "Red", 0xFFD71920), new BeadColor("06", "Dark Red", 0xFF8C1D18),
-        new BeadColor("07", "Pink", 0xFFFF7BAC), new BeadColor("08", "Purple", 0xFF7B4EA3),
-        new BeadColor("09", "Lavender", 0xFFC6A4D9), new BeadColor("10", "Blue", 0xFF1D70B8),
-        new BeadColor("11", "Light Blue", 0xFF6EC6E8), new BeadColor("12", "Turquoise", 0xFF00A7A5),
-        new BeadColor("13", "Green", 0xFF159447), new BeadColor("14", "Light Green", 0xFF8CC63E),
-        new BeadColor("15", "Brown", 0xFF7A4A2A), new BeadColor("16", "Tan", 0xFFD9A066),
-        new BeadColor("17", "Grey", 0xFF8A8C8E), new BeadColor("18", "Black", 0xFF111111),
-        new BeadColor("19", "Peach", 0xFFFFB997), new BeadColor("20", "Mint", 0xFFA8E6CF),
-        new BeadColor("21", "Navy", 0xFF173B6D), new BeadColor("22", "Maroon", 0xFF5E1F2F),
-        new BeadColor("23", "Olive", 0xFF7C8A2E), new BeadColor("24", "Transparent", 0x00FFFFFF)
+        new BeadColor("S01", "Artkal White", 0xFFFFFFFF), new BeadColor("S02", "Artkal Burning Sand", 0xFFFFA38B),
+        new BeadColor("S03", "Artkal Tangerine", 0xFFFF8200), new BeadColor("S04", "Artkal Orange", 0xFFFA4616),
+        new BeadColor("S05", "Artkal Tall Poppy", 0xFFEE2737), new BeadColor("S06", "Artkal Raspberry Pink", 0xFFEF64A2),
+        new BeadColor("S07", "Artkal Gray", 0xFF97999B), new BeadColor("S08", "Artkal Emerald", 0xFF26D07C),
+        new BeadColor("S09", "Artkal Dark Green", 0xFF007371), new BeadColor("S10", "Artkal Baby Blue", 0xFF56B7E6),
+        new BeadColor("S11", "Artkal Dark Blue", 0xFF0050B5), new BeadColor("S12", "Artkal Pastel Lavender", 0xFF9063CD),
+        new BeadColor("S13", "Artkal Black", 0xFF000000), new BeadColor("S14", "Artkal Sandstorm", 0xFFFDDA24),
+        new BeadColor("S15", "Artkal Redwood", 0xFFA72B2A), new BeadColor("S16", "Artkal Brown", 0xFF674736),
+        new BeadColor("S17", "Artkal Light Brown", 0xFF7B4D35), new BeadColor("S18", "Artkal Sand", 0xFFEAA794),
+        new BeadColor("S19", "Artkal Bubble Gum", 0xFFF8C1B8), new BeadColor("S20", "Artkal Green", 0xFF249E6B),
+        new BeadColor("S21", "Artkal Pastel Green", 0xFF93C90E), new BeadColor("S22", "Artkal Purple", 0xFF483698),
+        new BeadColor("S23", "Artkal Royal Purple", 0xFF7D55C7), new BeadColor("S24", "Artkal True Blue", 0xFF1164C9),
+        new BeadColor("CT1", "Artkal Clear", 0x00FFFFFF)
     };
 
     private BeadPalette() {}
