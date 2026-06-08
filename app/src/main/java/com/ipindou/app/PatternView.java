@@ -66,7 +66,6 @@ public class PatternView extends View {
         float top = contentTop(cell);
         float gridWidth = cell * pattern.width;
         float gridHeight = cell * pattern.height;
-        drawRulers(canvas, left, top, cell, ruler, gridWidth, gridHeight);
         textPaint.setTextSize(Math.max(7f, cell * 0.32f));
         for (int y = 0; y < pattern.height; y++) for (int x = 0; x < pattern.width; x++) {
             BeadColor color = BeadPalette.colorAt(pattern.get(x, y));
@@ -86,15 +85,20 @@ public class PatternView extends View {
         paint.setStrokeWidth(Math.max(2f, cell * 0.04f));
         paint.setColor(0xff6d5f55);
         canvas.drawRect(left, top, left + gridWidth, top + gridHeight, paint);
+        drawRulers(canvas, left, top, cell, ruler, gridWidth, gridHeight);
     }
 
     private void drawRulers(Canvas canvas, float left, float top, float cell, float ruler, float gridWidth, float gridHeight) {
+        float topRulerTop = stickyRulerStart(top - ruler, ruler, getHeight());
+        float bottomRulerTop = stickyRulerStart(top + gridHeight, ruler, getHeight());
+        float leftRulerLeft = stickyRulerStart(left - ruler, ruler, getWidth());
+        float rightRulerLeft = stickyRulerStart(left + gridWidth, ruler, getWidth());
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(RULER_BACKGROUND);
-        canvas.drawRect(left, top - ruler, left + gridWidth, top, paint);
-        canvas.drawRect(left, top + gridHeight, left + gridWidth, top + gridHeight + ruler, paint);
-        canvas.drawRect(left - ruler, top, left, top + gridHeight, paint);
-        canvas.drawRect(left + gridWidth, top, left + gridWidth + ruler, top + gridHeight, paint);
+        canvas.drawRect(0, topRulerTop, getWidth(), topRulerTop + ruler, paint);
+        canvas.drawRect(0, bottomRulerTop, getWidth(), bottomRulerTop + ruler, paint);
+        canvas.drawRect(leftRulerLeft, 0, leftRulerLeft + ruler, getHeight(), paint);
+        canvas.drawRect(rightRulerLeft, 0, rightRulerLeft + ruler, getHeight(), paint);
         textPaint.setColor(RULER_TEXT);
         textPaint.setTextSize(Math.max(7f, Math.min(cell * 0.38f, ruler * 0.46f)));
         Paint.FontMetrics fm = textPaint.getFontMetrics();
@@ -102,14 +106,16 @@ public class PatternView extends View {
         for (int x = 0; x < pattern.width; x++) {
             String number = String.valueOf(x + 1);
             float cx = left + x * cell + cell / 2f;
-            canvas.drawText(number, cx, top - ruler / 2f + baselineOffset, textPaint);
-            canvas.drawText(number, cx, top + gridHeight + ruler / 2f + baselineOffset, textPaint);
+            if (cx < -cell || cx > getWidth() + cell) continue;
+            canvas.drawText(number, cx, topRulerTop + ruler / 2f + baselineOffset, textPaint);
+            canvas.drawText(number, cx, bottomRulerTop + ruler / 2f + baselineOffset, textPaint);
         }
         for (int y = 0; y < pattern.height; y++) {
             String number = String.valueOf(y + 1);
             float cy = top + y * cell + cell / 2f + baselineOffset;
-            canvas.drawText(number, left - ruler / 2f, cy, textPaint);
-            canvas.drawText(number, left + gridWidth + ruler / 2f, cy, textPaint);
+            if (cy < -cell || cy > getHeight() + cell) continue;
+            canvas.drawText(number, leftRulerLeft + ruler / 2f, cy, textPaint);
+            canvas.drawText(number, rightRulerLeft + ruler / 2f, cy, textPaint);
         }
     }
 
@@ -164,6 +170,7 @@ public class PatternView extends View {
         float cell = currentCellSize();
         float left = contentLeft(cell);
         float top = contentTop(cell);
+        if (isInStickyRuler(touchX, touchY, left, top, cell)) return;
         int x = (int)((touchX - left) / cell);
         int y = (int)((touchY - top) / cell);
         if (x >= 0 && x < pattern.width && y >= 0 && y < pattern.height) {
@@ -189,6 +196,29 @@ public class PatternView extends View {
     private float contentTop(float cell) { return (getHeight() - cell * pattern.height) / 2f + panY; }
     private float rulerSize(float cell) { return cell * rulerCells(); }
     private float rulerCells() { return 0.72f; }
+
+    private boolean isInStickyRuler(float x, float y, float left, float top, float cell) {
+        float ruler = rulerSize(cell);
+        float gridWidth = cell * pattern.width;
+        float gridHeight = cell * pattern.height;
+        float topRulerTop = stickyRulerStart(top - ruler, ruler, getHeight());
+        float bottomRulerTop = stickyRulerStart(top + gridHeight, ruler, getHeight());
+        float leftRulerLeft = stickyRulerStart(left - ruler, ruler, getWidth());
+        float rightRulerLeft = stickyRulerStart(left + gridWidth, ruler, getWidth());
+        return isWithin(x, y, 0, topRulerTop, getWidth(), topRulerTop + ruler)
+                || isWithin(x, y, 0, bottomRulerTop, getWidth(), bottomRulerTop + ruler)
+                || isWithin(x, y, leftRulerLeft, 0, leftRulerLeft + ruler, getHeight())
+                || isWithin(x, y, rightRulerLeft, 0, rightRulerLeft + ruler, getHeight());
+    }
+
+    private boolean isWithin(float x, float y, float left, float top, float right, float bottom) {
+        return x >= left && x <= right && y >= top && y <= bottom;
+    }
+
+    private float stickyRulerStart(float preferred, float ruler, float viewport) {
+        if (viewport <= ruler) return 0f;
+        return clamp(preferred, 0f, viewport - ruler);
+    }
 
     private void resetViewport() {
         zoom = MIN_ZOOM;

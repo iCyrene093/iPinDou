@@ -38,11 +38,39 @@ public final class PatternGenerator {
         int[] indexes = pattern.copyIndexes();
         for (int y = 0; y < pattern.height; y++) {
             for (int x = 0; x < pattern.width; x++) {
-                if (pattern.get(x, y) != transparent || !touchesOpaque(pattern, x, y, transparent)) continue;
-                indexes[y * pattern.width + x] = outlineColorIndex;
+                int current = pattern.get(x, y);
+                if (current == transparent) {
+                    if (touchesOpaque(pattern, x, y, transparent)) indexes[y * pattern.width + x] = outlineColorIndex;
+                } else if (current != outlineColorIndex && shouldAddInteriorOutline(pattern, x, y, transparent)) {
+                    indexes[y * pattern.width + x] = outlineColorIndex;
+                }
             }
         }
         return new BeadPattern(pattern.width, pattern.height, indexes);
+    }
+
+    private static boolean shouldAddInteriorOutline(BeadPattern pattern, int x, int y, int transparent) {
+        int currentArgb = BeadPalette.colorAt(pattern.get(x, y)).argb;
+        int currentLuminance = luminance(currentArgb);
+        boolean darkerSideOfStrongEdge = false;
+        int strongEdges = 0;
+        int[] dx = { -1, 1, 0, 0 };
+        int[] dy = { 0, 0, -1, 1 };
+        for (int i = 0; i < dx.length; i++) {
+            int nx = x + dx[i], ny = y + dy[i];
+            if (nx < 0 || nx >= pattern.width || ny < 0 || ny >= pattern.height) continue;
+            int neighbor = pattern.get(nx, ny);
+            if (neighbor == transparent) continue;
+            int neighborArgb = BeadPalette.colorAt(neighbor).argb;
+            int neighborLuminance = luminance(neighborArgb);
+            int colorGap = distance(currentArgb, neighborArgb);
+            int lightGap = Math.abs(currentLuminance - neighborLuminance);
+            if (colorGap >= 105 || lightGap >= 42) {
+                strongEdges++;
+                if (currentLuminance <= neighborLuminance + 8) darkerSideOfStrongEdge = true;
+            }
+        }
+        return darkerSideOfStrongEdge && strongEdges <= 2;
     }
 
     private static boolean touchesOpaque(BeadPattern pattern, int x, int y, int transparent) {
@@ -93,5 +121,9 @@ public final class PatternGenerator {
         int br = (b >>> 16) & 0xff, bg = (b >>> 8) & 0xff, bb = b & 0xff;
         int dr = ar - br, dg = ag - bg, db = ab - bb;
         return (int)Math.sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    private static int luminance(int argb) {
+        return (((argb >>> 16) & 0xff) * 30 + ((argb >>> 8) & 0xff) * 59 + (argb & 0xff) * 11) / 100;
     }
 }
