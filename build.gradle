@@ -1,1 +1,3 @@
-// Offline-friendly build: no external Gradle plugins are required in this sandbox.
+// The app module conditionally applies the Android Gradle Plugin when an
+// installed Android SDK platform and a reachable/cached AGP are available.
+// Otherwise :app:assembleDebug falls back to the repository's offline APK builder.

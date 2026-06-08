@@ -1,11 +1,191 @@
-tasks.register('assembleDebug', Exec) {
+import java.util.Properties
+
+ext.ipindouAgpVersion = '8.7.3'
+
+ext.ipindouIsTruthy = { value ->
+    value != null && value.toString().trim().toLowerCase(Locale.US) in ['1', 'true', 'yes', 'y', 'on']
+}
+
+ext.ipindouFindAndroidSdk = {
+    List<String> candidates = []
+    ['ANDROID_HOME', 'ANDROID_SDK_ROOT'].each { name ->
+        String value = System.getenv(name)
+        if (value) candidates.add(value)
+    }
+
+    File localProperties = rootProject.file('local.properties')
+    if (localProperties.isFile()) {
+        Properties properties = new Properties()
+        localProperties.withInputStream { properties.load(it) }
+        String sdkDir = properties.getProperty('sdk.dir')
+        if (sdkDir) candidates.add(sdkDir)
+    }
+
+    candidates.collect { new File(it) }.find { sdk ->
+        sdk.isDirectory() && new File(sdk, 'platforms').isDirectory()
+    }
+}
+
+ext.ipindouHighestInstalledPlatform = { File sdkDir ->
+    File platformsDir = new File(sdkDir, 'platforms')
+    if (!platformsDir.isDirectory()) return null
+
+    platformsDir.listFiles()
+        ?.findAll { it.isDirectory() && it.name ==~ /android-\d+/ }
+        ?.collect { (it.name - 'android-') as Integer }
+        ?.sort()
+        ?.last()
+}
+
+ext.ipindouAgpCached = { String version ->
+    new File(gradle.gradleUserHomeDir, "caches/modules-2/files-2.1/com.android.tools.build/gradle/${version}").isDirectory()
+}
+
+ext.ipindouAgpReachable = { String version ->
+    try {
+        URL url = new URL("https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/${version}/gradle-${version}.pom")
+        URLConnection connection = url.openConnection()
+        connection.setConnectTimeout(2500)
+        connection.setReadTimeout(2500)
+        if (connection instanceof HttpURLConnection) {
+            connection.setRequestMethod('HEAD')
+            int response = connection.getResponseCode()
+            return response >= 200 && response < 400
+        }
+        connection.getInputStream().close()
+        true
+    } catch (Exception ignored) {
+        false
+    }
+}
+
+ext.ipindouForceManualApk = ipindouIsTruthy(
+    findProperty('ipindou.forceManualApk') ?: System.getenv('IPINDOU_FORCE_MANUAL_APK')
+)
+ext.ipindouForceAndroidBuild = ipindouIsTruthy(
+    findProperty('ipindou.forceAndroidBuild') ?: System.getenv('IPINDOU_FORCE_ANDROID_BUILD')
+)
+ext.ipindouAndroidSdkDir = ipindouFindAndroidSdk()
+ext.ipindouCompileSdk = ipindouAndroidSdkDir == null ? null : ipindouHighestInstalledPlatform(ipindouAndroidSdkDir)
+ext.ipindouAgpAvailable = ipindouAndroidSdkDir != null && ipindouCompileSdk != null && (ipindouAgpCached(ipindouAgpVersion) || ipindouAgpReachable(ipindouAgpVersion))
+ext.ipindouUseManualApk = ipindouForceManualApk || (!ipindouForceAndroidBuild && (ipindouAndroidSdkDir == null || ipindouCompileSdk == null || !ipindouAgpAvailable))
+
+buildscript {
+    String agpVersion = '8.7.3'
+    boolean forceManualApk = false
+    String forceValue = gradle.startParameter.projectProperties['ipindou.forceManualApk'] ?: System.getenv('IPINDOU_FORCE_MANUAL_APK')
+    if (forceValue != null) {
+        forceManualApk = forceValue.toString().trim().toLowerCase(Locale.US) in ['1', 'true', 'yes', 'y', 'on']
+    }
+    boolean forceAndroidBuild = false
+    String forceAndroidValue = gradle.startParameter.projectProperties['ipindou.forceAndroidBuild'] ?: System.getenv('IPINDOU_FORCE_ANDROID_BUILD')
+    if (forceAndroidValue != null) {
+        forceAndroidBuild = forceAndroidValue.toString().trim().toLowerCase(Locale.US) in ['1', 'true', 'yes', 'y', 'on']
+    }
+
+    List<String> candidates = []
+    ['ANDROID_HOME', 'ANDROID_SDK_ROOT'].each { name ->
+        String value = System.getenv(name)
+        if (value) candidates.add(value)
+    }
+
+    File localProperties = new File(rootDir, 'local.properties')
+    if (localProperties.isFile()) {
+        Properties properties = new Properties()
+        localProperties.withInputStream { properties.load(it) }
+        String sdkDir = properties.getProperty('sdk.dir')
+        if (sdkDir) candidates.add(sdkDir)
+    }
+
+    File sdkDir = candidates.collect { new File(it) }.find { sdk ->
+        sdk.isDirectory() && new File(sdk, 'platforms').isDirectory()
+    }
+    boolean hasCompileSdk = false
+    if (sdkDir != null) {
+        File platformsDir = new File(sdkDir, 'platforms')
+        hasCompileSdk = platformsDir.listFiles()?.any { it.isDirectory() && it.name ==~ /android-\d+/ } ?: false
+    }
+
+    boolean agpCached = new File(gradle.gradleUserHomeDir, "caches/modules-2/files-2.1/com.android.tools.build/gradle/${agpVersion}").isDirectory()
+    boolean agpReachable = false
+    if (!agpCached && sdkDir != null && hasCompileSdk) {
+        try {
+            URL url = new URL("https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/${agpVersion}/gradle-${agpVersion}.pom")
+            URLConnection connection = url.openConnection()
+            connection.setConnectTimeout(2500)
+            connection.setReadTimeout(2500)
+            if (connection instanceof HttpURLConnection) {
+                connection.setRequestMethod('HEAD')
+                int response = connection.getResponseCode()
+                agpReachable = response >= 200 && response < 400
+            } else {
+                connection.getInputStream().close()
+                agpReachable = true
+            }
+        } catch (Exception ignored) {
+            agpReachable = false
+        }
+    }
+
+    if (!forceManualApk && sdkDir != null && hasCompileSdk && (forceAndroidBuild || agpCached || agpReachable)) {
+        repositories {
+            google()
+            mavenCentral()
+        }
+        dependencies {
+            classpath "com.android.tools.build:gradle:${agpVersion}"
+        }
+    }
+}
+
+tasks.register('assembleManualDebug', Exec) {
     group = 'build'
-    description = 'Builds a signed debug APK using the offline fallback builder.'
+    description = 'Builds a tiny signed debug APK using the offline fallback builder.'
     workingDir rootProject.projectDir
     commandLine 'python3', 'tools/build_manual_apk.py', '--output', 'app/build/outputs/apk/debug/app-debug.apk'
 }
 
-tasks.register('clean', Delete) {
-    group = 'build'
-    delete layout.buildDirectory
+if (ipindouUseManualApk) {
+    tasks.register('assembleDebug') {
+        group = 'build'
+        description = 'Builds a signed debug APK with the offline fallback builder when Android SDK/AGP is unavailable.'
+        dependsOn tasks.named('assembleManualDebug')
+        doFirst {
+            if (ipindouForceManualApk) {
+                logger.lifecycle('Using iPinDou manual APK fallback because ipindou.forceManualApk/IPINDOU_FORCE_MANUAL_APK was set.')
+            } else if (ipindouAndroidSdkDir == null || ipindouCompileSdk == null) {
+                logger.lifecycle('Using iPinDou manual APK fallback because no installed Android SDK platform was found.')
+            } else {
+                logger.lifecycle("Using iPinDou manual APK fallback because Android Gradle Plugin ${ipindouAgpVersion} is not cached and could not be reached.")
+            }
+        }
+    }
+} else {
+    apply plugin: 'com.android.application'
+
+    android {
+        namespace 'com.ipindou.app'
+        compileSdk ipindouCompileSdk
+
+        defaultConfig {
+            applicationId 'com.ipindou.app'
+            minSdk 23
+            targetSdk Math.min(ipindouCompileSdk as int, 35)
+            versionCode 1
+            versionName '1.0'
+        }
+    }
+
+    tasks.named('assembleDebug') {
+        doFirst {
+            logger.lifecycle("Building the full iPinDou Android app with Android SDK ${ipindouAndroidSdkDir} and compileSdk ${ipindouCompileSdk}.")
+        }
+    }
+}
+
+if (tasks.findByName('clean') == null) {
+    tasks.register('clean', Delete) {
+        group = 'build'
+        delete layout.buildDirectory
+    }
 }

@@ -20,10 +20,18 @@
 
 ## APK 构建
 
-当前仓库提供了一个不依赖 Android Gradle Plugin / Android SDK 下载的离线 debug APK 构建任务，适合受限沙箱或临时验收：
+默认构建命令仍然是：
 
 ```bash
 gradle :app:assembleDebug
 ```
 
-生成文件位于 `app/build/outputs/apk/debug/app-debug.apk`。该离线 APK 使用仓库内的手写构建器生成并签名；完整生产版仍建议在安装 Android SDK 后使用标准 Android 工具链构建。
+在已安装 Android SDK platform 且 Android Gradle Plugin 可用（可联网解析或已在 Gradle 缓存中）的环境中，该任务会应用标准 `com.android.application` 插件，编译 `MainActivity`、`PatternView`、资源文件和 `app/src/main/java/com/ipindou/app/core/` 中的核心图纸引擎，生成完整 debug APK。
+
+如果当前机器没有可用 Android SDK platform，或无法获得 Android Gradle Plugin，`:app:assembleDebug` 才会回退到仓库内的离线构建器，生成一个仅用于受限沙箱冒烟验证的极简 APK。也可以显式运行离线任务：
+
+```bash
+gradle :app:assembleManualDebug
+```
+
+生成文件位于 `app/build/outputs/apk/debug/app-debug.apk`。如需强制离线回退，可设置 `-Pipindou.forceManualApk=true` 或环境变量 `IPINDOU_FORCE_MANUAL_APK=true`；如需在诊断环境中强制尝试 Android 工具链，可设置 `-Pipindou.forceAndroidBuild=true` 或 `IPINDOU_FORCE_ANDROID_BUILD=true`。
