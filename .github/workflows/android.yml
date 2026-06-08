@@ -23,7 +23,7 @@ jobs:
       uses: android-actions/setup-android@v3
 
     - name: Install Android platform
-      run: sdkmanager 'platforms;android-35'
+      run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
     - name: Set up Gradle
       uses: gradle/actions/setup-gradle@v6
@@ -33,13 +33,40 @@ jobs:
     - name: Run core JVM tests
       run: gradle :app:testCoreJava --warning-mode all
 
-    - name: Build debug APK with Android toolchain
-      run: gradle :app:assembleDebug --warning-mode all
+    - name: Generate CI release signing key
+      run: |
+        keytool -genkeypair \
+          -keystore "$RUNNER_TEMP/ipindou-ci-release.jks" \
+          -storepass "$IPINDOU_RELEASE_STORE_PASSWORD" \
+          -keypass "$IPINDOU_RELEASE_KEY_PASSWORD" \
+          -alias "$IPINDOU_RELEASE_KEY_ALIAS" \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -dname "CN=iPinDou CI,O=iPinDou,C=US"
+      env:
+        IPINDOU_RELEASE_STORE_PASSWORD: android
+        IPINDOU_RELEASE_KEY_PASSWORD: android
+        IPINDOU_RELEASE_KEY_ALIAS: ipindou-ci-release
+
+    - name: Build signed release APK with Android toolchain
+      run: >-
+        gradle :app:assembleRelease --warning-mode all
+        -Pipindou.releaseStoreFile="$RUNNER_TEMP/ipindou-ci-release.jks"
+        -Pipindou.releaseStorePassword="$IPINDOU_RELEASE_STORE_PASSWORD"
+        -Pipindou.releaseKeyAlias="$IPINDOU_RELEASE_KEY_ALIAS"
+        -Pipindou.releaseKeyPassword="$IPINDOU_RELEASE_KEY_PASSWORD"
       env:
         IPINDOU_FORCE_ANDROID_BUILD: 'true'
+        IPINDOU_RELEASE_STORE_PASSWORD: android
+        IPINDOU_RELEASE_KEY_PASSWORD: android
+        IPINDOU_RELEASE_KEY_ALIAS: ipindou-ci-release
 
-    - name: Upload debug APK
+    - name: Verify release APK signature
+      run: $ANDROID_HOME/build-tools/35.0.0/apksigner verify app/build/outputs/apk/release/*.apk
+
+    - name: Upload release APK
       uses: actions/upload-artifact@v6
       with:
-        name: app-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+        name: app-release-apk
+        path: app/build/outputs/apk/release/*.apk
