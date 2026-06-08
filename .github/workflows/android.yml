@@ -25,4 +25,4 @@ jobs:
         gradle-version: '8.14.4'
 
     - name: Build debug APK with Gradle
-      run: gradle :app:assembleDebug
+      run: gradle :app:assembleDebug --warning-mode all

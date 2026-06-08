@@ -1,6 +1,6 @@
 import java.util.Properties
 
-ext.ipindouAgpVersion = '8.7.3'
+ext.ipindouAgpVersion = '8.13.2'
 
 ext.ipindouIsTruthy = { value ->
     value != null && value.toString().trim().toLowerCase(Locale.US) in ['1', 'true', 'yes', 'y', 'on']
@@ -71,7 +71,7 @@ ext.ipindouAgpAvailable = ipindouAndroidSdkDir != null && ipindouCompileSdk != n
 ext.ipindouUseManualApk = ipindouForceManualApk || (!ipindouForceAndroidBuild && (ipindouAndroidSdkDir == null || ipindouCompileSdk == null || !ipindouAgpAvailable))
 
 buildscript {
-    String agpVersion = '8.7.3'
+    String agpVersion = '8.13.2'
     boolean forceManualApk = false
     String forceValue = gradle.startParameter.projectProperties['ipindou.forceManualApk'] ?: System.getenv('IPINDOU_FORCE_MANUAL_APK')
     if (forceValue != null) {
@@ -176,9 +176,11 @@ if (ipindouUseManualApk) {
         }
     }
 
-    tasks.named('assembleDebug') {
-        doFirst {
-            logger.lifecycle("Building the full iPinDou Android app with Android SDK ${ipindouAndroidSdkDir} and compileSdk ${ipindouCompileSdk}.")
+    tasks.configureEach { task ->
+        if (task.name == 'assembleDebug') {
+            task.doFirst {
+                logger.lifecycle("Building the full iPinDou Android app with Android SDK ${ipindouAndroidSdkDir} and compileSdk ${ipindouCompileSdk}.")
+            }
         }
     }
 }
