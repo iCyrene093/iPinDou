@@ -14,11 +14,24 @@ import com.ipindou.app.core.BeadPattern;
 public class PatternView extends View {
     public interface CellEditor { void onCellEdited(int x, int y); }
 
+    private static final float MIN_ZOOM = 1f;
+    private static final float MAX_ZOOM = 6f;
+
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private BeadPattern pattern;
-    private int selectedColor = 18;
+    private int selectedColor = 12;
     private CellEditor editor;
+    private float zoom = MIN_ZOOM;
+    private float panX = 0f;
+    private float panY = 0f;
+    private float pinchStartDistance = 0f;
+    private float pinchStartZoom = MIN_ZOOM;
+    private float pinchStartPanX = 0f;
+    private float pinchStartPanY = 0f;
+    private float pinchStartFocusX = 0f;
+    private float pinchStartFocusY = 0f;
+    private boolean pinching = false;
 
     public PatternView(Context context) { super(context); init(); }
     public PatternView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -28,17 +41,26 @@ public class PatternView extends View {
         setBackgroundColor(0xfff6f1e9);
     }
 
-    public void setPattern(BeadPattern pattern) { this.pattern = pattern; invalidate(); }
+    public void setPattern(BeadPattern pattern) {
+        this.pattern = pattern;
+        resetViewport();
+        invalidate();
+    }
     public BeadPattern getPattern() { return pattern; }
     public void setSelectedColor(int selectedColor) { this.selectedColor = selectedColor; }
     public void setCellEditor(CellEditor editor) { this.editor = editor; }
 
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        clampPan();
+    }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (pattern == null) return;
-        float cell = Math.min(getWidth() / (float) pattern.width, getHeight() / (float) pattern.height);
-        float left = (getWidth() - cell * pattern.width) / 2f;
-        float top = (getHeight() - cell * pattern.height) / 2f;
+        float cell = currentCellSize();
+        float left = contentLeft(cell);
+        float top = contentTop(cell);
         textPaint.setTextSize(Math.max(7f, cell * 0.32f));
         for (int y = 0; y < pattern.height; y++) for (int x = 0; x < pattern.width; x++) {
             BeadColor color = BeadPalette.colorAt(pattern.get(x, y));
@@ -58,19 +80,107 @@ public class PatternView extends View {
 
     @Override public boolean onTouchEvent(MotionEvent event) {
         if (pattern == null) return true;
-        if (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE) {
-            float cell = Math.min(getWidth() / (float) pattern.width, getHeight() / (float) pattern.height);
-            float left = (getWidth() - cell * pattern.width) / 2f;
-            float top = (getHeight() - cell * pattern.height) / 2f;
-            int x = (int)((event.getX() - left) / cell);
-            int y = (int)((event.getY() - top) / cell);
-            if (x >= 0 && x < pattern.width && y >= 0 && y < pattern.height) {
-                pattern.set(x, y, selectedColor);
-                if (editor != null) editor.onCellEdited(x, y);
-                invalidate();
-            }
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_POINTER_DOWN && event.getPointerCount() >= 2) {
+            beginPinch(event);
+            return true;
+        }
+        if (action == MotionEvent.ACTION_POINTER_UP) {
+            pinching = event.getPointerCount() > 2;
+            return true;
+        }
+        if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
+            pinching = false;
+            return true;
+        }
+        if (event.getPointerCount() >= 2 && (action == MotionEvent.ACTION_MOVE || pinching)) {
+            updatePinch(event);
+            return true;
+        }
+        if (!pinching && (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE)) {
+            editCell(event.getX(), event.getY());
             return true;
         }
         return true;
     }
+
+    private void beginPinch(MotionEvent event) {
+        pinching = true;
+        pinchStartDistance = pointerDistance(event);
+        pinchStartZoom = zoom;
+        pinchStartPanX = panX;
+        pinchStartPanY = panY;
+        pinchStartFocusX = focusX(event);
+        pinchStartFocusY = focusY(event);
+    }
+
+    private void updatePinch(MotionEvent event) {
+        if (!pinching) beginPinch(event);
+        float distance = pointerDistance(event);
+        if (pinchStartDistance <= 0f || distance <= 0f) return;
+        zoom = clamp(pinchStartZoom * distance / pinchStartDistance, MIN_ZOOM, MAX_ZOOM);
+        panX = pinchStartPanX + focusX(event) - pinchStartFocusX;
+        panY = pinchStartPanY + focusY(event) - pinchStartFocusY;
+        clampPan();
+        invalidate();
+    }
+
+    private void editCell(float touchX, float touchY) {
+        float cell = currentCellSize();
+        float left = contentLeft(cell);
+        float top = contentTop(cell);
+        int x = (int)((touchX - left) / cell);
+        int y = (int)((touchY - top) / cell);
+        if (x >= 0 && x < pattern.width && y >= 0 && y < pattern.height) {
+            pattern.set(x, y, selectedColor);
+            if (editor != null) editor.onCellEdited(x, y);
+            invalidate();
+        }
+    }
+
+    private float currentCellSize() {
+        if (pattern == null) return 0f;
+        return baseCellSize() * zoom;
+    }
+
+    private float baseCellSize() {
+        if (pattern == null) return 0f;
+        return Math.min(getWidth() / (float) pattern.width, getHeight() / (float) pattern.height);
+    }
+
+    private float contentLeft(float cell) { return (getWidth() - cell * pattern.width) / 2f + panX; }
+    private float contentTop(float cell) { return (getHeight() - cell * pattern.height) / 2f + panY; }
+
+    private void resetViewport() {
+        zoom = MIN_ZOOM;
+        panX = 0f;
+        panY = 0f;
+        pinching = false;
+    }
+
+    private void clampPan() {
+        if (pattern == null || getWidth() == 0 || getHeight() == 0) return;
+        float contentWidth = currentCellSize() * pattern.width;
+        float contentHeight = currentCellSize() * pattern.height;
+        panX = clampAxisPan(panX, contentWidth, getWidth());
+        panY = clampAxisPan(panY, contentHeight, getHeight());
+    }
+
+    private float clampAxisPan(float pan, float contentSize, float viewportSize) {
+        if (contentSize <= viewportSize) return 0f;
+        float max = (contentSize - viewportSize) / 2f;
+        return clamp(pan, -max, max);
+    }
+
+    private float pointerDistance(MotionEvent event) {
+        if (event.getPointerCount() < 2) return 0f;
+        float dx = event.getX(0) - event.getX(1);
+        float dy = event.getY(0) - event.getY(1);
+        return (float)Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private float focusX(MotionEvent event) { return (event.getX(0) + event.getX(1)) / 2f; }
+    private float focusY(MotionEvent event) { return (event.getY(0) + event.getY(1)) / 2f; }
+
+    private float clamp(float value, float min, float max) { return Math.max(min, Math.min(max, value)); }
 }

@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
     private EditText heightInput;
     private CheckBox removeBackground;
     private Bitmap sourceBitmap;
-    private int selectedColorIndex = 18;
+    private int selectedColorIndex = 12;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -129,16 +129,19 @@ public class MainActivity extends Activity {
     }
 
     private void generatePattern() {
+        int w = parseSize(widthInput, 29), h = parseSize(heightInput, 29);
         if (sourceBitmap == null) {
-            Toast.makeText(this, "请先导入图片；当前显示空白 29x29 模板，可直接手绘。", Toast.LENGTH_LONG).show();
+            patternView.setPattern(new BeadPattern(w, h));
+            updateStats();
+            Toast.makeText(this, "已生成空白 " + w + "x" + h + " 图纸，可直接手绘或先导入图片。", Toast.LENGTH_LONG).show();
             return;
         }
-        int w = parseSize(widthInput, 29), h = parseSize(heightInput, 29);
         Bitmap scaled = sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
         int[] pixels = new int[scaled.getWidth() * scaled.getHeight()];
         scaled.getPixels(pixels, 0, scaled.getWidth(), 0, 0, scaled.getWidth(), scaled.getHeight());
         patternView.setPattern(PatternGenerator.fromPixels(pixels, scaled.getWidth(), scaled.getHeight(), w, h, removeBackground.isChecked()));
         updateStats();
+        Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
     }
 
     private int parseSize(EditText input, int fallback) {
