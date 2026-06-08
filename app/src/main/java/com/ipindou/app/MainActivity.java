@@ -40,9 +40,12 @@ public class MainActivity extends Activity {
     private EditText widthInput;
     private EditText heightInput;
     private CheckBox removeBackground;
+    private CheckBox outlineEnabled;
+    private Button outlineColorButton;
     private Bitmap sourceBitmap;
     private String pendingSaveMessage;
     private int selectedColorIndex = BeadPalette.nearestOpaqueIndex(0xff000000);
+    private int outlineColorIndex = BeadPalette.nearestOpaqueIndex(0xff000000);
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -78,7 +81,10 @@ public class MainActivity extends Activity {
         root.addView(settings);
         widthInput = input("29"); heightInput = input("29");
         removeBackground = new CheckBox(this); removeBackground.setText("自动去背景"); removeBackground.setChecked(true);
-        settings.addView(label("宽")); settings.addView(widthInput); settings.addView(label("高")); settings.addView(heightInput); settings.addView(removeBackground);
+        outlineEnabled = new CheckBox(this); outlineEnabled.setText("自动描边"); outlineEnabled.setChecked(true);
+        outlineColorButton = button("描边色：" + BeadPalette.colorAt(outlineColorIndex).code, v -> setOutlineColorFromBrush());
+        settings.addView(label("宽")); settings.addView(widthInput); settings.addView(label("高")); settings.addView(heightInput);
+        settings.addView(removeBackground); settings.addView(outlineEnabled); settings.addView(outlineColorButton);
 
         patternView = new PatternView(this);
         patternView.setSelectedColor(selectedColorIndex);
@@ -144,7 +150,9 @@ public class MainActivity extends Activity {
         Bitmap scaled = sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
         int[] pixels = new int[scaled.getWidth() * scaled.getHeight()];
         scaled.getPixels(pixels, 0, scaled.getWidth(), 0, 0, scaled.getWidth(), scaled.getHeight());
-        patternView.setPattern(PatternGenerator.fromPixels(pixels, scaled.getWidth(), scaled.getHeight(), w, h, removeBackground.isChecked()));
+        BeadPattern generated = PatternGenerator.fromPixels(pixels, scaled.getWidth(), scaled.getHeight(), w, h, removeBackground.isChecked());
+        if (outlineEnabled.isChecked()) generated = PatternGenerator.withOutline(generated, outlineColorIndex);
+        patternView.setPattern(generated);
         updateStats();
         if (saveAfterGenerate) saveCurrentPattern("已生成并保存 " + w + "x" + h + " 图纸。");
         else Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
@@ -162,6 +170,14 @@ public class MainActivity extends Activity {
 
     private void mirrorHorizontal() { BeadPattern p = patternView.getPattern(); if (p != null) { patternView.setPattern(p.mirroredHorizontal()); updateStats(); } }
     private void mirrorVertical() { BeadPattern p = patternView.getPattern(); if (p != null) { patternView.setPattern(p.mirroredVertical()); updateStats(); } }
+
+    private void setOutlineColorFromBrush() {
+        outlineColorIndex = selectedColorIndex == BeadPalette.transparentIndex() ? BeadPalette.nearestOpaqueIndex(0xff000000) : selectedColorIndex;
+        BeadColor color = BeadPalette.colorAt(outlineColorIndex);
+        outlineColorButton.setText("描边色：" + color.code);
+        outlineColorButton.setBackgroundColor(color.argb);
+        Toast.makeText(this, "描边色：" + color.code + " " + color.name, Toast.LENGTH_SHORT).show();
+    }
 
     private void exportPattern() {
         saveCurrentPattern("已导出到图库");
@@ -231,24 +247,104 @@ public class MainActivity extends Activity {
     }
 
     private Bitmap renderPatternBitmap(BeadPattern p, int cell) {
-        Bitmap bitmap = Bitmap.createBitmap(p.width * cell, p.height * cell, Bitmap.Config.ARGB_8888);
+        int ruler = Math.max(36, (int)(cell * 0.72f));
+        int legendPadding = 28;
+        int legendRow = 52;
+        int swatch = 34;
+        int[] counts = colorCounts(p);
+        int usedColors = usedColorCount(counts);
+        int legendColumns = Math.max(1, Math.min(4, Math.max(1, p.width * cell / 220)));
+        int legendRows = (usedColors + legendColumns - 1) / legendColumns;
+        int legendHeight = usedColors == 0 ? 0 : legendPadding * 2 + legendRows * legendRow + 34;
+        int gridWidth = p.width * cell;
+        int gridHeight = p.height * cell;
+        Bitmap bitmap = Bitmap.createBitmap(gridWidth + ruler * 2, gridHeight + ruler * 2 + legendHeight, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
-        text.setTextAlign(Paint.Align.CENTER); text.setTextSize(cell * 0.32f);
+        text.setTextAlign(Paint.Align.CENTER);
         canvas.drawColor(0xffffffff);
+        drawExportRulers(canvas, p, cell, ruler, gridWidth, gridHeight, paint, text);
         for (int y = 0; y < p.height; y++) for (int x = 0; x < p.width; x++) {
             BeadColor c = BeadPalette.colorAt(p.get(x, y));
+            int left = ruler + x * cell, top = ruler + y * cell;
             paint.setStyle(Paint.Style.FILL); paint.setColor(c.argb == 0x00ffffff ? 0x22ffffff : c.argb);
-            canvas.drawRect(x * cell, y * cell, (x + 1) * cell, (y + 1) * cell, paint);
+            canvas.drawRect(left, top, left + cell, top + cell, paint);
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2); paint.setColor(0xff6d5f55);
-            canvas.drawRect(x * cell, y * cell, (x + 1) * cell, (y + 1) * cell, paint);
-            int lum = (((c.argb >>> 16) & 0xff) * 30 + ((c.argb >>> 8) & 0xff) * 59 + (c.argb & 0xff) * 11) / 100;
+            canvas.drawRect(left, top, left + cell, top + cell, paint);
+            int lum = luminance(c.argb);
+            text.setTextSize(cell * 0.32f);
             text.setColor(lum < 130 ? 0xffffffff : 0xff111111);
-            canvas.drawText(c.code, x * cell + cell / 2f, y * cell + cell * 0.61f, text);
+            canvas.drawText(c.code, left + cell / 2f, top + cell * 0.61f, text);
         }
+        paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(4); paint.setColor(0xff514238);
+        canvas.drawRect(ruler, ruler, ruler + gridWidth, ruler + gridHeight, paint);
+        drawColorLegend(canvas, counts, ruler, ruler + gridHeight + ruler, gridWidth, legendColumns, legendPadding, legendRow, swatch, paint, text);
         return bitmap;
     }
+
+    private void drawExportRulers(Canvas canvas, BeadPattern p, int cell, int ruler, int gridWidth, int gridHeight, Paint paint, Paint text) {
+        paint.setStyle(Paint.Style.FILL); paint.setColor(0xffefe2cf);
+        canvas.drawRect(ruler, 0, ruler + gridWidth, ruler, paint);
+        canvas.drawRect(ruler, ruler + gridHeight, ruler + gridWidth, ruler + gridHeight + ruler, paint);
+        canvas.drawRect(0, ruler, ruler, ruler + gridHeight, paint);
+        canvas.drawRect(ruler + gridWidth, ruler, ruler + gridWidth + ruler, ruler + gridHeight, paint);
+        text.setColor(0xff5b4633); text.setTextSize(Math.max(18f, cell * 0.28f)); text.setTextAlign(Paint.Align.CENTER);
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float baselineOffset = -(fm.ascent + fm.descent) / 2f;
+        for (int x = 0; x < p.width; x++) {
+            String number = String.valueOf(x + 1);
+            float cx = ruler + x * cell + cell / 2f;
+            canvas.drawText(number, cx, ruler / 2f + baselineOffset, text);
+            canvas.drawText(number, cx, ruler + gridHeight + ruler / 2f + baselineOffset, text);
+        }
+        for (int y = 0; y < p.height; y++) {
+            String number = String.valueOf(y + 1);
+            float cy = ruler + y * cell + cell / 2f + baselineOffset;
+            canvas.drawText(number, ruler / 2f, cy, text);
+            canvas.drawText(number, ruler + gridWidth + ruler / 2f, cy, text);
+        }
+    }
+
+    private void drawColorLegend(Canvas canvas, int[] counts, int left, int top, int width, int columns, int padding, int rowHeight, int swatch, Paint paint, Paint text) {
+        if (usedColorCount(counts) == 0) return;
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(0xff3f342c);
+        text.setTextSize(28f);
+        canvas.drawText("颜色用量", left, top + padding, text);
+        int columnWidth = Math.max(180, width / columns);
+        int item = 0;
+        for (int i = 0; i < counts.length; i++) {
+            if (counts[i] <= 0 || i == BeadPalette.transparentIndex()) continue;
+            int col = item % columns;
+            int row = item / columns;
+            int x = left + col * columnWidth;
+            int y = top + padding + 18 + row * rowHeight;
+            BeadColor color = BeadPalette.colorAt(i);
+            paint.setStyle(Paint.Style.FILL); paint.setColor(color.argb);
+            canvas.drawRect(x, y, x + swatch, y + swatch, paint);
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2); paint.setColor(0xff6d5f55);
+            canvas.drawRect(x, y, x + swatch, y + swatch, paint);
+            text.setTextSize(22f); text.setColor(0xff3f342c);
+            canvas.drawText(color.code + "  #" + String.format(Locale.US, "%06X", color.argb & 0xffffff) + "  x" + counts[i], x + swatch + 12, y + swatch * 0.72f, text);
+            item++;
+        }
+        text.setTextAlign(Paint.Align.CENTER);
+    }
+
+    private int[] colorCounts(BeadPattern p) {
+        int[] counts = new int[BeadPalette.colors().length];
+        for (int y = 0; y < p.height; y++) for (int x = 0; x < p.width; x++) counts[p.get(x, y)]++;
+        return counts;
+    }
+
+    private int usedColorCount(int[] counts) {
+        int used = 0;
+        for (int i = 0; i < counts.length; i++) if (i != BeadPalette.transparentIndex() && counts[i] > 0) used++;
+        return used;
+    }
+
+    private int luminance(int argb) { return (((argb >>> 16) & 0xff) * 30 + ((argb >>> 8) & 0xff) * 59 + (argb & 0xff) * 11) / 100; }
 
     private void updateStats() {
         BeadPattern p = patternView.getPattern();
