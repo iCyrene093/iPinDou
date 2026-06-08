@@ -120,7 +120,7 @@ class DexBuilder:
         set_text = self.m(textview, p_set_text, 'setText')
         set_size = self.m(textview, p_set_size, 'setTextSize')
         set_content = self.m(activity, p_set_content, 'setContentView')
-        message_text = 'iPinDou 拼豆图纸工具\n\nAPK 已离线构建完成。源代码包含：图片导入、自动去背景、颜色代码图纸、手动编辑、镜像反转、PNG 导出和用量统计。\n\n请在具备 Android SDK 的环境中使用完整源码构建生产版。'
+        message_text = 'iPinDou 拼豆图纸工具\n\nAPK 已离线构建完成。源代码包含：图片导入、去背景、颜色代码图纸、手动编辑、镜像反转、PNG 导出和用量统计。\n\n请在具备 Android SDK 的环境中使用完整源码构建生产版。'
         self.s(message_text)
         self.s('MainActivity.java')
 

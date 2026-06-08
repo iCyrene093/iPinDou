@@ -15,10 +15,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.view.DisplayCutout;
 import android.view.Gravity;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
@@ -49,6 +53,7 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        configureCutoutHandling();
         setContentView(buildUi());
         patternView.setPattern(blankPattern(29, 29));
         updateStats();
@@ -57,7 +62,7 @@ public class MainActivity extends Activity {
     private View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(18, 18, 18, 18);
+        applySafeAreaPadding(root, 18, 18, 18, 18);
 
         TextView title = new TextView(this);
         title.setText("iPinDou 拼豆图纸工作台");
@@ -68,9 +73,9 @@ public class MainActivity extends Activity {
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setGravity(Gravity.CENTER);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(toolbar);
+        root.addView(horizontalScroll(toolbar));
         toolbar.addView(button("导入图片", v -> openImagePicker()));
-        toolbar.addView(button("生成并保存图纸", v -> generatePattern(true)));
+        toolbar.addView(button("保存图纸", v -> generatePattern(true)));
         toolbar.addView(button("水平镜像", v -> mirrorHorizontal()));
         toolbar.addView(button("垂直镜像", v -> mirrorVertical()));
         toolbar.addView(button("导出PNG", v -> exportPattern()));
@@ -78,11 +83,14 @@ public class MainActivity extends Activity {
         LinearLayout settings = new LinearLayout(this);
         settings.setGravity(Gravity.CENTER);
         settings.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(settings);
+        root.addView(horizontalScroll(settings));
         widthInput = input("29"); heightInput = input("29");
-        removeBackground = new CheckBox(this); removeBackground.setText("自动去背景"); removeBackground.setChecked(true);
-        outlineEnabled = new CheckBox(this); outlineEnabled.setText("自动描边"); outlineEnabled.setChecked(true);
-        outlineColorButton = button("描边色：" + BeadPalette.colorAt(outlineColorIndex).code, v -> setOutlineColorFromBrush());
+        removeBackground = new CheckBox(this); removeBackground.setText("去背景"); removeBackground.setChecked(true);
+        outlineEnabled = new CheckBox(this); outlineEnabled.setText("描边"); outlineEnabled.setChecked(true);
+        outlineColorButton = button("描边色：" + BeadPalette.colorAt(outlineColorIndex).code, v -> showOutlineColorPicker());
+        CompoundButton.OnCheckedChangeListener previewListener = (buttonView, isChecked) -> refreshGeneratedPreview();
+        removeBackground.setOnCheckedChangeListener(previewListener);
+        outlineEnabled.setOnCheckedChangeListener(previewListener);
         settings.addView(label("宽")); settings.addView(widthInput); settings.addView(label("高")); settings.addView(heightInput);
         settings.addView(removeBackground); settings.addView(outlineEnabled); settings.addView(outlineColorButton);
 
@@ -105,7 +113,40 @@ public class MainActivity extends Activity {
         return root;
     }
 
+    private void configureCutoutHandling() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Window window = getWindow();
+            WindowManager.LayoutParams attributes = window.getAttributes();
+            attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
+            window.setAttributes(attributes);
+        }
+    }
+
+    private void applySafeAreaPadding(View view, int left, int top, int right, int bottom) {
+        view.setPadding(left, top, right, bottom);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            view.setOnApplyWindowInsetsListener((v, insets) -> {
+                int safeLeft = insets.getSystemWindowInsetLeft();
+                int safeTop = insets.getSystemWindowInsetTop();
+                int safeRight = insets.getSystemWindowInsetRight();
+                int safeBottom = insets.getSystemWindowInsetBottom();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    DisplayCutout cutout = insets.getDisplayCutout();
+                    if (cutout != null) {
+                        safeLeft = Math.max(safeLeft, cutout.getSafeInsetLeft());
+                        safeTop = Math.max(safeTop, cutout.getSafeInsetTop());
+                        safeRight = Math.max(safeRight, cutout.getSafeInsetRight());
+                        safeBottom = Math.max(safeBottom, cutout.getSafeInsetBottom());
+                    }
+                }
+                v.setPadding(left + safeLeft, top + safeTop, right + safeRight, bottom + safeBottom);
+                return insets;
+            });
+        }
+    }
+
     private Button button(String text, View.OnClickListener listener) { Button b = new Button(this); b.setText(text); b.setOnClickListener(listener); return b; }
+    private HorizontalScrollView horizontalScroll(View child) { HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.setFillViewport(true); scroll.addView(child); return scroll; }
     private TextView label(String text) { TextView v = new TextView(this); v.setText(text); v.setGravity(Gravity.CENTER); v.setPadding(10, 0, 4, 0); return v; }
     private EditText input(String text) { EditText e = new EditText(this); e.setText(text); e.setEms(3); e.setSelectAllOnFocus(true); e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); return e; }
 
@@ -139,12 +180,16 @@ public class MainActivity extends Activity {
     }
 
     private void generatePattern(boolean saveAfterGenerate) {
+        generatePattern(saveAfterGenerate, false);
+    }
+
+    private void generatePattern(boolean saveAfterGenerate, boolean silentPreview) {
         int w = parseSize(widthInput, 29), h = parseSize(heightInput, 29);
         if (sourceBitmap == null) {
             patternView.setPattern(blankPattern(w, h));
             updateStats();
             if (saveAfterGenerate) saveCurrentPattern("已生成并保存空白 " + w + "x" + h + " 图纸。");
-            else Toast.makeText(this, "已生成空白 " + w + "x" + h + " 图纸，可直接手绘或先导入图片。", Toast.LENGTH_LONG).show();
+            else if (!silentPreview) Toast.makeText(this, "已生成空白 " + w + "x" + h + " 图纸，可直接手绘或先导入图片。", Toast.LENGTH_LONG).show();
             return;
         }
         Bitmap scaled = sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
@@ -155,7 +200,7 @@ public class MainActivity extends Activity {
         patternView.setPattern(generated);
         updateStats();
         if (saveAfterGenerate) saveCurrentPattern("已生成并保存 " + w + "x" + h + " 图纸。");
-        else Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
+        else if (!silentPreview) Toast.makeText(this, "已生成 " + w + "x" + h + " 图纸。", Toast.LENGTH_SHORT).show();
     }
 
     private BeadPattern blankPattern(int width, int height) {
@@ -171,11 +216,40 @@ public class MainActivity extends Activity {
     private void mirrorHorizontal() { BeadPattern p = patternView.getPattern(); if (p != null) { patternView.setPattern(p.mirroredHorizontal()); updateStats(); } }
     private void mirrorVertical() { BeadPattern p = patternView.getPattern(); if (p != null) { patternView.setPattern(p.mirroredVertical()); updateStats(); } }
 
-    private void setOutlineColorFromBrush() {
-        outlineColorIndex = selectedColorIndex == BeadPalette.transparentIndex() ? BeadPalette.nearestOpaqueIndex(0xff000000) : selectedColorIndex;
+    private void refreshGeneratedPreview() {
+        if (sourceBitmap != null) generatePattern(false, true);
+    }
+
+    private void showOutlineColorPicker() {
+        BeadColor[] colors = BeadPalette.colors();
+        String[] names = new String[colors.length - 1];
+        int[] indexes = new int[colors.length - 1];
+        int selected = 0;
+        for (int i = 1; i < colors.length; i++) {
+            BeadColor color = colors[i];
+            int item = i - 1;
+            indexes[item] = i;
+            names[item] = color.code + "  " + color.name;
+            if (i == outlineColorIndex) selected = item;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("选择描边颜色")
+                .setSingleChoiceItems(names, selected, (dialog, which) -> {
+                    outlineColorIndex = indexes[which];
+                    updateOutlineColorButton();
+                    refreshGeneratedPreview();
+                    dialog.dismiss();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void updateOutlineColorButton() {
         BeadColor color = BeadPalette.colorAt(outlineColorIndex);
         outlineColorButton.setText("描边色：" + color.code);
         outlineColorButton.setBackgroundColor(color.argb);
+        int luminance = (((color.argb >>> 16) & 0xff) * 30 + ((color.argb >>> 8) & 0xff) * 59 + (color.argb & 0xff) * 11) / 100;
+        outlineColorButton.setTextColor(luminance < 130 ? 0xffffffff : 0xff111111);
         Toast.makeText(this, "描边色：" + color.code + " " + color.name, Toast.LENGTH_SHORT).show();
     }
 

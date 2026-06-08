@@ -64,7 +64,7 @@ public final class BeadPalette {
             }
         }
         if (index != 291) throw new IllegalStateException("MARD palette must contain 291 colors, found " + index);
-        colors[index] = new BeadColor("透明", "自动去背景", 0x00ffffff);
+        colors[index] = new BeadColor("透明", "去背景", 0x00ffffff);
         return colors;
     }
 
