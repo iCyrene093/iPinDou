@@ -16,6 +16,8 @@ public class PatternView extends View {
 
     private static final float MIN_ZOOM = 1f;
     private static final float MAX_ZOOM = 6f;
+    private static final int RULER_BACKGROUND = 0xffefe2cf;
+    private static final int RULER_TEXT = 0xff5b4633;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -59,8 +61,12 @@ public class PatternView extends View {
         super.onDraw(canvas);
         if (pattern == null) return;
         float cell = currentCellSize();
+        float ruler = rulerSize(cell);
         float left = contentLeft(cell);
         float top = contentTop(cell);
+        float gridWidth = cell * pattern.width;
+        float gridHeight = cell * pattern.height;
+        drawRulers(canvas, left, top, cell, ruler, gridWidth, gridHeight);
         textPaint.setTextSize(Math.max(7f, cell * 0.32f));
         for (int y = 0; y < pattern.height; y++) for (int x = 0; x < pattern.width; x++) {
             BeadColor color = BeadPalette.colorAt(pattern.get(x, y));
@@ -75,6 +81,35 @@ public class PatternView extends View {
             int luminance = (((color.argb >>> 16) & 0xff) * 30 + ((color.argb >>> 8) & 0xff) * 59 + (color.argb & 0xff) * 11) / 100;
             textPaint.setColor(luminance < 130 ? 0xffffffff : 0xff222222);
             if (cell > 16) canvas.drawText(color.code, l + cell / 2f, t + cell * 0.62f, textPaint);
+        }
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(2f, cell * 0.04f));
+        paint.setColor(0xff6d5f55);
+        canvas.drawRect(left, top, left + gridWidth, top + gridHeight, paint);
+    }
+
+    private void drawRulers(Canvas canvas, float left, float top, float cell, float ruler, float gridWidth, float gridHeight) {
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(RULER_BACKGROUND);
+        canvas.drawRect(left, top - ruler, left + gridWidth, top, paint);
+        canvas.drawRect(left, top + gridHeight, left + gridWidth, top + gridHeight + ruler, paint);
+        canvas.drawRect(left - ruler, top, left, top + gridHeight, paint);
+        canvas.drawRect(left + gridWidth, top, left + gridWidth + ruler, top + gridHeight, paint);
+        textPaint.setColor(RULER_TEXT);
+        textPaint.setTextSize(Math.max(7f, Math.min(cell * 0.38f, ruler * 0.46f)));
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        float baselineOffset = -(fm.ascent + fm.descent) / 2f;
+        for (int x = 0; x < pattern.width; x++) {
+            String number = String.valueOf(x + 1);
+            float cx = left + x * cell + cell / 2f;
+            canvas.drawText(number, cx, top - ruler / 2f + baselineOffset, textPaint);
+            canvas.drawText(number, cx, top + gridHeight + ruler / 2f + baselineOffset, textPaint);
+        }
+        for (int y = 0; y < pattern.height; y++) {
+            String number = String.valueOf(y + 1);
+            float cy = top + y * cell + cell / 2f + baselineOffset;
+            canvas.drawText(number, left - ruler / 2f, cy, textPaint);
+            canvas.drawText(number, left + gridWidth + ruler / 2f, cy, textPaint);
         }
     }
 
@@ -145,11 +180,15 @@ public class PatternView extends View {
 
     private float baseCellSize() {
         if (pattern == null) return 0f;
-        return Math.min(getWidth() / (float) pattern.width, getHeight() / (float) pattern.height);
+        float extraColumns = 2f * rulerCells();
+        float extraRows = 2f * rulerCells();
+        return Math.min(getWidth() / (pattern.width + extraColumns), getHeight() / (pattern.height + extraRows));
     }
 
     private float contentLeft(float cell) { return (getWidth() - cell * pattern.width) / 2f + panX; }
     private float contentTop(float cell) { return (getHeight() - cell * pattern.height) / 2f + panY; }
+    private float rulerSize(float cell) { return cell * rulerCells(); }
+    private float rulerCells() { return 0.72f; }
 
     private void resetViewport() {
         zoom = MIN_ZOOM;

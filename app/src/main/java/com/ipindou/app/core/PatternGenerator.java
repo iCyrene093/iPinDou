@@ -33,6 +33,29 @@ public final class PatternGenerator {
         return ((int)(a / count) << 24) | ((int)(r / count) << 16) | ((int)(g / count) << 8) | (int)(b / count);
     }
 
+    public static BeadPattern withOutline(BeadPattern pattern, int outlineColorIndex) {
+        int transparent = BeadPalette.transparentIndex();
+        int[] indexes = pattern.copyIndexes();
+        for (int y = 0; y < pattern.height; y++) {
+            for (int x = 0; x < pattern.width; x++) {
+                if (pattern.get(x, y) != transparent || !touchesOpaque(pattern, x, y, transparent)) continue;
+                indexes[y * pattern.width + x] = outlineColorIndex;
+            }
+        }
+        return new BeadPattern(pattern.width, pattern.height, indexes);
+    }
+
+    private static boolean touchesOpaque(BeadPattern pattern, int x, int y, int transparent) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dy == 0) continue;
+                int nx = x + dx, ny = y + dy;
+                if (nx >= 0 && nx < pattern.width && ny >= 0 && ny < pattern.height && pattern.get(nx, ny) != transparent) return true;
+            }
+        }
+        return false;
+    }
+
     public static void removeEdgeConnectedBackground(int[] pixels, int width, int height) {
         int seed = dominantEdgeColor(pixels, width, height);
         int tolerance = 38;
