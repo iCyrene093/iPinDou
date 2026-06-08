@@ -86,35 +86,74 @@ public final class PatternGenerator {
     }
 
     public static void removeEdgeConnectedBackground(int[] pixels, int width, int height) {
-        int seed = dominantEdgeColor(pixels, width, height);
-        int tolerance = 38;
+        BackgroundSample background = dominantEdgeBackground(pixels, width, height);
         boolean[] seen = new boolean[pixels.length];
         ArrayDeque<Integer> queue = new ArrayDeque<>();
-        for (int x = 0; x < width; x++) { enqueueIfBg(pixels, width, x, 0, seed, tolerance, seen, queue); enqueueIfBg(pixels, width, x, height - 1, seed, tolerance, seen, queue); }
-        for (int y = 0; y < height; y++) { enqueueIfBg(pixels, width, 0, y, seed, tolerance, seen, queue); enqueueIfBg(pixels, width, width - 1, y, seed, tolerance, seen, queue); }
+        for (int x = 0; x < width; x++) { enqueueIfBg(pixels, width, x, 0, background, seen, queue); enqueueIfBg(pixels, width, x, height - 1, background, seen, queue); }
+        for (int y = 0; y < height; y++) { enqueueIfBg(pixels, width, 0, y, background, seen, queue); enqueueIfBg(pixels, width, width - 1, y, background, seen, queue); }
         while (!queue.isEmpty()) {
             int p = queue.removeFirst();
             pixels[p] = 0x00FFFFFF;
             int x = p % width, y = p / width;
-            if (x > 0) enqueueIfBg(pixels, width, x - 1, y, seed, tolerance, seen, queue);
-            if (x + 1 < width) enqueueIfBg(pixels, width, x + 1, y, seed, tolerance, seen, queue);
-            if (y > 0) enqueueIfBg(pixels, width, x, y - 1, seed, tolerance, seen, queue);
-            if (y + 1 < height) enqueueIfBg(pixels, width, x, y + 1, seed, tolerance, seen, queue);
+            if (x > 0) enqueueIfBg(pixels, width, x - 1, y, background, seen, queue);
+            if (x + 1 < width) enqueueIfBg(pixels, width, x + 1, y, background, seen, queue);
+            if (y > 0) enqueueIfBg(pixels, width, x, y - 1, background, seen, queue);
+            if (y + 1 < height) enqueueIfBg(pixels, width, x, y + 1, background, seen, queue);
         }
     }
 
-    private static void enqueueIfBg(int[] pixels, int width, int x, int y, int seed, int tolerance, boolean[] seen, ArrayDeque<Integer> queue) {
+    private static void enqueueIfBg(int[] pixels, int width, int x, int y, BackgroundSample background, boolean[] seen, ArrayDeque<Integer> queue) {
         int p = y * width + x;
         if (seen[p]) return;
         seen[p] = true;
-        if (distance(pixels[p], seed) <= tolerance) queue.addLast(p);
+        if (distance(pixels[p], background.seed) <= background.tolerance) queue.addLast(p);
     }
 
-    private static int dominantEdgeColor(int[] pixels, int width, int height) {
-        long r = 0, g = 0, b = 0, count = 0;
-        for (int x = 0; x < width; x++) { int top = pixels[x], bottom = pixels[(height - 1) * width + x]; r += ((top >>> 16) & 0xff) + ((bottom >>> 16) & 0xff); g += ((top >>> 8) & 0xff) + ((bottom >>> 8) & 0xff); b += (top & 0xff) + (bottom & 0xff); count += 2; }
-        for (int y = 1; y + 1 < height; y++) { int left = pixels[y * width], right = pixels[y * width + width - 1]; r += ((left >>> 16) & 0xff) + ((right >>> 16) & 0xff); g += ((left >>> 8) & 0xff) + ((right >>> 8) & 0xff); b += (left & 0xff) + (right & 0xff); count += 2; }
-        return 0xff000000 | ((int)(r / count) << 16) | ((int)(g / count) << 8) | (int)(b / count);
+    private static BackgroundSample dominantEdgeBackground(int[] pixels, int width, int height) {
+        int[] histogram = new int[512];
+        forEachEdgePixel(pixels, width, height, color -> histogram[quantizeBackgroundBin(color)]++);
+        int dominantBin = 0;
+        for (int i = 1; i < histogram.length; i++) if (histogram[i] > histogram[dominantBin]) dominantBin = i;
+
+        long[] totals = new long[4];
+        final int selectedBin = dominantBin;
+        forEachEdgePixel(pixels, width, height, color -> {
+            if (quantizeBackgroundBin(color) == selectedBin) {
+                totals[0] += (color >>> 16) & 0xff;
+                totals[1] += (color >>> 8) & 0xff;
+                totals[2] += color & 0xff;
+                totals[3]++;
+            }
+        });
+        if (totals[3] == 0) return new BackgroundSample(0xffffffff, 38);
+
+        int seed = 0xff000000 | ((int)(totals[0] / totals[3]) << 16) | ((int)(totals[1] / totals[3]) << 8) | (int)(totals[2] / totals[3]);
+        int[] maxClusterDistance = new int[1];
+        forEachEdgePixel(pixels, width, height, color -> {
+            if (quantizeBackgroundBin(color) == selectedBin) maxClusterDistance[0] = Math.max(maxClusterDistance[0], distance(color, seed));
+        });
+        return new BackgroundSample(seed, Math.max(38, Math.min(72, maxClusterDistance[0] + 18)));
+    }
+
+    private static int quantizeBackgroundBin(int color) {
+        return (((color >>> 21) & 0x07) << 6) | (((color >>> 13) & 0x07) << 3) | ((color >>> 5) & 0x07);
+    }
+
+    private static void forEachEdgePixel(int[] pixels, int width, int height, EdgePixelConsumer consumer) {
+        for (int x = 0; x < width; x++) { consumer.accept(pixels[x]); consumer.accept(pixels[(height - 1) * width + x]); }
+        for (int y = 1; y + 1 < height; y++) { consumer.accept(pixels[y * width]); consumer.accept(pixels[y * width + width - 1]); }
+    }
+
+    private interface EdgePixelConsumer { void accept(int color); }
+
+    private static final class BackgroundSample {
+        final int seed;
+        final int tolerance;
+
+        BackgroundSample(int seed, int tolerance) {
+            this.seed = seed;
+            this.tolerance = tolerance;
+        }
     }
 
     private static int distance(int a, int b) {

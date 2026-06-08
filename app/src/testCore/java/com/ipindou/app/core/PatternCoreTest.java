@@ -8,6 +8,8 @@ public final class PatternCoreTest {
         testColorIndexValidation();
         testTransparentAverageProducesEmptyCell();
         testEdgeConnectedBackgroundRemovalKeepsInterior();
+        testDominantBackgroundIgnoresEdgeSubject();
+        testBackgroundRemovalHandlesSoftEdgeVariation();
         testSamplingUsesEveryTargetCell();
         testOutlineFillsTransparentNeighbor();
     }
@@ -56,6 +58,39 @@ public final class PatternCoreTest {
         assertEquals(transparent, pixels[2], "top-right edge background removal");
         assertEquals(black, pixels[4], "interior subject preservation");
         assertEquals(transparent, pixels[8], "bottom-right edge background removal");
+    }
+
+    private static void testDominantBackgroundIgnoresEdgeSubject() {
+        int white = 0xffffffff;
+        int black = 0xff000000;
+        int[] pixels = new int[] {
+                white, white, white, white, white,
+                black, white, white, white, white,
+                black, black, black, white, white,
+                black, white, white, white, white,
+                white, white, white, white, white
+        };
+        PatternGenerator.removeEdgeConnectedBackground(pixels, 5, 5);
+        int transparent = 0x00ffffff;
+        assertEquals(transparent, pixels[4], "dominant white background removed despite edge subject");
+        assertEquals(black, pixels[5], "edge subject preserved outside dominant background cluster");
+        assertEquals(black, pixels[12], "interior subject connected to edge subject preserved");
+    }
+
+    private static void testBackgroundRemovalHandlesSoftEdgeVariation() {
+        int white = 0xffffffff;
+        int offWhite = 0xffeeeeee;
+        int black = 0xff000000;
+        int[] pixels = new int[] {
+                white, offWhite, white,
+                offWhite, black, offWhite,
+                white, offWhite, white
+        };
+        PatternGenerator.removeEdgeConnectedBackground(pixels, 3, 3);
+        int transparent = 0x00ffffff;
+        assertEquals(transparent, pixels[0], "soft white corner background removal");
+        assertEquals(transparent, pixels[1], "soft off-white edge background removal");
+        assertEquals(black, pixels[4], "soft edge interior subject preservation");
     }
 
     private static void testSamplingUsesEveryTargetCell() {
