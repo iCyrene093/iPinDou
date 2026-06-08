@@ -326,7 +326,7 @@ public class MainActivity extends Activity {
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2); paint.setColor(0xff6d5f55);
             canvas.drawRect(x, y, x + swatch, y + swatch, paint);
             text.setTextSize(22f); text.setColor(0xff3f342c);
-            canvas.drawText(color.code + "  #" + String.format(Locale.US, "%06X", color.argb & 0xffffff) + "  x" + counts[i], x + swatch + 12, y + swatch * 0.72f, text);
+            canvas.drawText(color.code + "  x" + counts[i], x + swatch + 12, y + swatch * 0.72f, text);
             item++;
         }
         text.setTextAlign(Paint.Align.CENTER);
