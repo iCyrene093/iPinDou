@@ -35,6 +35,7 @@ public final class PatternGenerator {
 
     public static BeadPattern withOutline(BeadPattern pattern, int outlineColorIndex) {
         int transparent = BeadPalette.transparentIndex();
+        if (outlineColorIndex < 0 || outlineColorIndex >= transparent) throw new IllegalArgumentException("Outline color must be an opaque palette index");
         int[] indexes = pattern.copyIndexes();
         for (int y = 0; y < pattern.height; y++) {
             for (int x = 0; x < pattern.width; x++) {

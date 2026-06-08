@@ -185,6 +185,25 @@ if (ipindouUseManualApk) {
     }
 }
 
+
+tasks.register('testCoreJava') {
+    group = 'verification'
+    description = 'Compiles and runs JVM smoke tests for the platform-independent core classes.'
+    doLast {
+        File classesDir = layout.buildDirectory.dir('testCoreJava/classes').get().asFile
+        delete classesDir
+        classesDir.mkdirs()
+        List<String> sources = fileTree('src/main/java/com/ipindou/app/core') { include '**/*.java' }.files.collect { it.path }
+        sources.addAll(fileTree('src/testCore/java') { include '**/*.java' }.files.collect { it.path })
+        providers.exec {
+            commandLine(['javac', '-encoding', 'UTF-8', '-d', classesDir.path] + sources)
+        }.result.get().assertNormalExitValue()
+        providers.exec {
+            commandLine 'java', '-cp', classesDir.path, 'com.ipindou.app.core.PatternCoreTest'
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 if (tasks.findByName('clean') == null) {
     tasks.register('clean', Delete) {
         group = 'build'

@@ -9,7 +9,7 @@
 - 使用 MARD 291 个核心标准色将图片按感知色差量化，每格显示对应 MARD 色号；去背景时会额外用透明格标记被移除的背景。
 - 支持手动点按/拖动修改格子颜色，并可在图纸区域双指缩放查看细节。
 - 支持水平镜像、垂直镜像，方便反向熨烫和转印。
-- “保存图纸”会在生成后立即把带网格与颜色代码的 PNG 图纸保存到系统图库，仍可通过“导出PNG”手动再次导出。
+- “生成图纸”会按当前设置刷新图纸；“保存图纸”会保存当前屏幕上的图纸，保留手动编辑和镜像结果；仍可通过“导出PNG”手动再次导出。
 - 实时统计图纸尺寸、总豆数和各颜色用量。
 
 ## 项目结构
@@ -35,3 +35,11 @@ gradle :app:assembleManualDebug
 ```
 
 生成文件位于 `app/build/outputs/apk/debug/app-debug.apk`。如需强制离线回退，可设置 `-Pipindou.forceManualApk=true` 或环境变量 `IPINDOU_FORCE_MANUAL_APK=true`；如需在诊断环境中强制尝试 Android 工具链，可设置 `-Pipindou.forceAndroidBuild=true` 或 `IPINDOU_FORCE_ANDROID_BUILD=true`。
+
+## 测试
+
+核心图纸模型和生成器可在不安装 Android SDK 的环境中运行 JVM 冒烟测试：
+
+```bash
+gradle :app:testCoreJava
+```
