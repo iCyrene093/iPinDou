@@ -86,7 +86,6 @@ public class MainActivity extends Activity {
         toolbar.addView(button("保存图纸", v -> saveCurrentPattern("已保存图纸")));
         toolbar.addView(button("水平镜像", v -> mirrorHorizontal()));
         toolbar.addView(button("垂直镜像", v -> mirrorVertical()));
-        toolbar.addView(button("导出PNG", v -> exportPattern()));
 
         LinearLayout settings = new LinearLayout(this);
         settings.setGravity(Gravity.CENTER);
@@ -329,10 +328,6 @@ public class MainActivity extends Activity {
         int luminance = (((color.argb >>> 16) & 0xff) * 30 + ((color.argb >>> 8) & 0xff) * 59 + (color.argb & 0xff) * 11) / 100;
         outlineColorButton.setTextColor(luminance < 130 ? 0xffffffff : 0xff111111);
         Toast.makeText(this, "描边色：" + color.code + " " + color.name, Toast.LENGTH_SHORT).show();
-    }
-
-    private void exportPattern() {
-        saveCurrentPattern("已导出到图库");
     }
 
     private void saveCurrentPattern(String successPrefix) {

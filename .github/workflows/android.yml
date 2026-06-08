@@ -33,13 +33,13 @@ jobs:
     - name: Run core JVM tests
       run: gradle :app:testCoreJava --warning-mode all
 
-    - name: Build debug APK with Android toolchain
-      run: gradle :app:assembleDebug --warning-mode all
+    - name: Build release APK with Android toolchain
+      run: gradle :app:assembleRelease --warning-mode all
       env:
         IPINDOU_FORCE_ANDROID_BUILD: 'true'
 
-    - name: Upload debug APK
+    - name: Upload release APK
       uses: actions/upload-artifact@v6
       with:
-        name: app-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+        name: app-release-apk
+        path: app/build/outputs/apk/release/*.apk
