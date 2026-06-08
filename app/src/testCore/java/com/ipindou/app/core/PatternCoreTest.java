@@ -6,6 +6,10 @@ public final class PatternCoreTest {
         testTransparentCounts();
         testOutlineRejectsTransparent();
         testColorIndexValidation();
+        testTransparentAverageProducesEmptyCell();
+        testEdgeConnectedBackgroundRemovalKeepsInterior();
+        testSamplingUsesEveryTargetCell();
+        testOutlineFillsTransparentNeighbor();
     }
 
     private static void testMirrors() {
@@ -30,6 +34,57 @@ public final class PatternCoreTest {
         BeadPattern pattern = new BeadPattern(1, 1);
         assertThrows(() -> pattern.set(0, 0, -1), "negative color index rejection");
         assertThrows(() -> pattern.fill(BeadPalette.colors().length), "out-of-range color index rejection");
+    }
+
+    private static void testTransparentAverageProducesEmptyCell() {
+        int transparent = BeadPalette.transparentIndex();
+        BeadPattern pattern = PatternGenerator.fromPixels(new int[] { 0x00ffffff, 0x00ffffff, 0x00ffffff, 0x00ffffff }, 2, 2, 1, 1, true);
+        assertEquals(transparent, pattern.get(0, 0), "fully transparent source cell");
+    }
+
+    private static void testEdgeConnectedBackgroundRemovalKeepsInterior() {
+        int white = 0xffffffff;
+        int black = 0xff000000;
+        int[] pixels = new int[] {
+                white, white, white,
+                white, black, white,
+                white, white, white
+        };
+        PatternGenerator.removeEdgeConnectedBackground(pixels, 3, 3);
+        int transparent = 0x00ffffff;
+        assertEquals(transparent, pixels[0], "top-left edge background removal");
+        assertEquals(transparent, pixels[2], "top-right edge background removal");
+        assertEquals(black, pixels[4], "interior subject preservation");
+        assertEquals(transparent, pixels[8], "bottom-right edge background removal");
+    }
+
+    private static void testSamplingUsesEveryTargetCell() {
+        int black = BeadPalette.nearestOpaqueIndex(0xff000000);
+        int white = BeadPalette.nearestOpaqueIndex(0xffffffff);
+        BeadPattern pattern = PatternGenerator.fromPixels(new int[] {
+                0xff000000, 0xffffffff,
+                0xffffffff, 0xff000000
+        }, 2, 2, 2, 2, false);
+        assertEquals(black, pattern.get(0, 0), "sampled top-left cell");
+        assertEquals(white, pattern.get(1, 0), "sampled top-right cell");
+        assertEquals(white, pattern.get(0, 1), "sampled bottom-left cell");
+        assertEquals(black, pattern.get(1, 1), "sampled bottom-right cell");
+    }
+
+    private static void testOutlineFillsTransparentNeighbor() {
+        int transparent = BeadPalette.transparentIndex();
+        int black = BeadPalette.nearestOpaqueIndex(0xff000000);
+        int red = BeadPalette.nearestOpaqueIndex(0xffff0000);
+        BeadPattern pattern = new BeadPattern(3, 3, new int[] {
+                transparent, transparent, transparent,
+                transparent, red, transparent,
+                transparent, transparent, transparent
+        });
+        BeadPattern outlined = PatternGenerator.withOutline(pattern, black);
+        assertEquals(red, outlined.get(1, 1), "outlined center remains subject");
+        assertEquals(black, outlined.get(0, 0), "outlined diagonal neighbor");
+        assertEquals(black, outlined.get(1, 0), "outlined cardinal neighbor");
+        assertEquals(black, outlined.get(2, 2), "outlined opposite diagonal neighbor");
     }
 
     private static void assertArrayEquals(int[] expected, int[] actual, String label) {
