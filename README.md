@@ -34,7 +34,7 @@ gradle :app:assembleRelease
 gradle :app:assembleManualRelease
 ```
 
-生成文件位于 `app/build/outputs/apk/release/`。如需强制离线回退，可设置 `-Pipindou.forceManualApk=true` 或环境变量 `IPINDOU_FORCE_MANUAL_APK=true`；如需在诊断环境中强制尝试 Android 工具链，可设置 `-Pipindou.forceAndroidBuild=true` 或 `IPINDOU_FORCE_ANDROID_BUILD=true`。
+生成文件位于 `app/build/outputs/apk/release/`。在 Android 工具链路径中，如果需要签名 release APK，可通过 `-Pipindou.releaseStoreFile=...`、`-Pipindou.releaseStorePassword=...`、`-Pipindou.releaseKeyAlias=...`、`-Pipindou.releaseKeyPassword=...`（或对应的 `IPINDOU_RELEASE_*` 环境变量）提供 keystore；GitHub Actions 会为 CI artifact 生成临时 keystore 并在上传前校验 APK 签名。如需强制离线回退，可设置 `-Pipindou.forceManualApk=true` 或环境变量 `IPINDOU_FORCE_MANUAL_APK=true`；如需在诊断环境中强制尝试 Android 工具链，可设置 `-Pipindou.forceAndroidBuild=true` 或 `IPINDOU_FORCE_ANDROID_BUILD=true`。
 
 ## 测试
 
