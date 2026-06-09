@@ -180,7 +180,6 @@ public class MainActivity extends Activity {
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         root.addView(horizontalScroll(toolbar));
         toolbar.addView(button("导入图片", v -> openImagePicker()));
-        toolbar.addView(button("生成图纸", v -> generatePattern(false)));
         toolbar.addView(button("保存图纸", v -> saveCurrentPattern("已保存图纸")));
         toolbar.addView(button("水平镜像", v -> mirrorHorizontal()));
         toolbar.addView(button("垂直镜像", v -> mirrorVertical()));
