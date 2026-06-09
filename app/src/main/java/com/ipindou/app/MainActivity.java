@@ -17,6 +17,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.DisplayCutout;
 import android.view.Gravity;
 import android.view.Window;
@@ -57,6 +59,7 @@ public class MainActivity extends Activity {
     private static final int MAX_EXPORT_CELL = 64;
     private static final int MIN_EXPORT_CELL = 18;
     private static final int MAX_EXPORT_GRID_SIDE = 4096;
+    private static final long SIZE_CHANGE_REFRESH_DELAY_MS = 300L;
     private PatternView patternView;
     private TextView stats;
     private EditText widthInput;
@@ -71,6 +74,7 @@ public class MainActivity extends Activity {
     private final ExecutorService generatorExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService saveExecutor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingSizeRefresh;
     private int generationToken = 0;
     private int selectedColorIndex = BeadPalette.nearestOpaqueIndex(0xff000000);
     private int outlineColorIndex = BeadPalette.nearestOpaqueIndex(0xff000000);
@@ -189,6 +193,9 @@ public class MainActivity extends Activity {
         settings.setOrientation(LinearLayout.HORIZONTAL);
         root.addView(horizontalScroll(settings));
         widthInput = input("29"); heightInput = input("29");
+        TextWatcher sizeChangeWatcher = sizeChangeWatcher();
+        widthInput.addTextChangedListener(sizeChangeWatcher);
+        heightInput.addTextChangedListener(sizeChangeWatcher);
         removeBackground = new CheckBox(this); removeBackground.setText("去背景"); removeBackground.setChecked(true);
         outlineEnabled = new CheckBox(this); outlineEnabled.setText("描边"); outlineEnabled.setChecked(true);
         outlineColorButton = button("描边色：" + BeadPalette.colorAt(outlineColorIndex).code, v -> showOutlineColorPicker());
@@ -358,6 +365,7 @@ public class MainActivity extends Activity {
         generationToken++;
         generatorExecutor.shutdownNow();
         saveExecutor.shutdownNow();
+        if (pendingSizeRefresh != null) mainHandler.removeCallbacks(pendingSizeRefresh);
         synchronized (sourceBitmapLock) {
             if (sourceBitmap != null && !sourceBitmap.isRecycled()) sourceBitmap.recycle();
             sourceBitmap = null;
@@ -439,7 +447,40 @@ public class MainActivity extends Activity {
     private void mirrorVertical() { BeadPattern p = patternView.getPattern(); if (p != null) { patternView.setPattern(p.mirroredVertical()); updateStats(); } }
 
     private void refreshGeneratedPreview() {
-        if (hasSourceBitmap()) generatePattern(false, true);
+        if (patternView == null || !hasCompleteSizeInput()) return;
+        if (hasSourceBitmap()) {
+            generatePattern(false, true);
+        } else {
+            BeadPattern pattern = patternView.getPattern();
+            int w = parseSize(widthInput, DEFAULT_PATTERN_SIZE), h = parseSize(heightInput, DEFAULT_PATTERN_SIZE);
+            if (pattern == null || pattern.width != w || pattern.height != h) {
+                patternView.setPattern(blankPattern(w, h));
+                updateStats();
+            }
+        }
+    }
+
+    private TextWatcher sizeChangeWatcher() {
+        return new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) { scheduleSizeRefresh(); }
+        };
+    }
+
+    private void scheduleSizeRefresh() {
+        if (pendingSizeRefresh != null) mainHandler.removeCallbacks(pendingSizeRefresh);
+        pendingSizeRefresh = () -> {
+            pendingSizeRefresh = null;
+            refreshGeneratedPreview();
+        };
+        mainHandler.postDelayed(pendingSizeRefresh, SIZE_CHANGE_REFRESH_DELAY_MS);
+    }
+
+    private boolean hasCompleteSizeInput() {
+        return widthInput != null && heightInput != null
+                && widthInput.getText().toString().trim().length() > 0
+                && heightInput.getText().toString().trim().length() > 0;
     }
 
     private boolean hasSourceBitmap() {
