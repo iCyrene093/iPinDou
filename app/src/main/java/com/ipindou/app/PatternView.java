@@ -34,6 +34,7 @@ public class PatternView extends View {
     private float pinchStartFocusX = 0f;
     private float pinchStartFocusY = 0f;
     private boolean pinching = false;
+    private boolean suppressEditingUntilGestureEnds = false;
 
     public PatternView(Context context) { super(context); init(); }
     public PatternView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -122,7 +123,14 @@ public class PatternView extends View {
     @Override public boolean onTouchEvent(MotionEvent event) {
         if (pattern == null) return true;
         int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            pinching = false;
+            suppressEditingUntilGestureEnds = false;
+            editCell(event.getX(), event.getY());
+            return true;
+        }
         if (action == MotionEvent.ACTION_POINTER_DOWN && event.getPointerCount() >= 2) {
+            suppressEditingUntilGestureEnds = true;
             beginPinch(event);
             return true;
         }
@@ -132,13 +140,15 @@ public class PatternView extends View {
         }
         if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
             pinching = false;
+            suppressEditingUntilGestureEnds = false;
             return true;
         }
         if (event.getPointerCount() >= 2 && (action == MotionEvent.ACTION_MOVE || pinching)) {
+            suppressEditingUntilGestureEnds = true;
             updatePinch(event);
             return true;
         }
-        if (!pinching && (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE)) {
+        if (!pinching && !suppressEditingUntilGestureEnds && action == MotionEvent.ACTION_MOVE) {
             editCell(event.getX(), event.getY());
             return true;
         }
@@ -173,7 +183,7 @@ public class PatternView extends View {
         if (isInStickyRuler(touchX, touchY, left, top, cell)) return;
         int x = (int)((touchX - left) / cell);
         int y = (int)((touchY - top) / cell);
-        if (x >= 0 && x < pattern.width && y >= 0 && y < pattern.height) {
+        if (x >= 0 && x < pattern.width && y >= 0 && y < pattern.height && pattern.get(x, y) != selectedColor) {
             pattern.set(x, y, selectedColor);
             if (editor != null) editor.onCellEdited(x, y);
             invalidate();
@@ -225,6 +235,7 @@ public class PatternView extends View {
         panX = 0f;
         panY = 0f;
         pinching = false;
+        suppressEditingUntilGestureEnds = false;
     }
 
     private void clampPan() {
