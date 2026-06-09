@@ -7,6 +7,7 @@ import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import com.ipindou.app.core.BeadColor;
 import com.ipindou.app.core.BeadPalette;
 import com.ipindou.app.core.BeadPattern;
@@ -33,14 +34,19 @@ public class PatternView extends View {
     private float pinchStartPanY = 0f;
     private float pinchStartFocusX = 0f;
     private float pinchStartFocusY = 0f;
+    private float touchDownX = 0f;
+    private float touchDownY = 0f;
+    private float touchSlop = 0f;
     private boolean pinching = false;
     private boolean suppressEditingUntilGestureEnds = false;
+    private boolean singleTouchEditing = false;
 
     public PatternView(Context context) { super(context); init(); }
     public PatternView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
 
     private void init() {
         textPaint.setTextAlign(Paint.Align.CENTER);
+        touchSlop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
         setBackgroundColor(0xfff6f1e9);
     }
 
@@ -126,11 +132,14 @@ public class PatternView extends View {
         if (action == MotionEvent.ACTION_DOWN) {
             pinching = false;
             suppressEditingUntilGestureEnds = false;
-            editCell(event.getX(), event.getY());
+            singleTouchEditing = false;
+            touchDownX = event.getX();
+            touchDownY = event.getY();
             return true;
         }
         if (action == MotionEvent.ACTION_POINTER_DOWN && event.getPointerCount() >= 2) {
             suppressEditingUntilGestureEnds = true;
+            singleTouchEditing = false;
             beginPinch(event);
             return true;
         }
@@ -138,21 +147,42 @@ public class PatternView extends View {
             pinching = event.getPointerCount() > 2;
             return true;
         }
-        if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
-            pinching = false;
-            suppressEditingUntilGestureEnds = false;
+        if (action == MotionEvent.ACTION_CANCEL) {
+            finishTouch();
+            return true;
+        }
+        if (action == MotionEvent.ACTION_UP) {
+            if (!pinching && !suppressEditingUntilGestureEnds && !singleTouchEditing) editCell(event.getX(), event.getY());
+            finishTouch();
             return true;
         }
         if (event.getPointerCount() >= 2 && (action == MotionEvent.ACTION_MOVE || pinching)) {
             suppressEditingUntilGestureEnds = true;
+            singleTouchEditing = false;
             updatePinch(event);
             return true;
         }
         if (!pinching && !suppressEditingUntilGestureEnds && action == MotionEvent.ACTION_MOVE) {
-            editCell(event.getX(), event.getY());
+            if (!singleTouchEditing && movedBeyondTouchSlop(event.getX(), event.getY())) {
+                singleTouchEditing = true;
+                editCell(touchDownX, touchDownY);
+            }
+            if (singleTouchEditing) editCell(event.getX(), event.getY());
             return true;
         }
         return true;
+    }
+
+    private boolean movedBeyondTouchSlop(float x, float y) {
+        float dx = x - touchDownX;
+        float dy = y - touchDownY;
+        return dx * dx + dy * dy > touchSlop * touchSlop;
+    }
+
+    private void finishTouch() {
+        pinching = false;
+        suppressEditingUntilGestureEnds = false;
+        singleTouchEditing = false;
     }
 
     private void beginPinch(MotionEvent event) {
@@ -236,6 +266,7 @@ public class PatternView extends View {
         panY = 0f;
         pinching = false;
         suppressEditingUntilGestureEnds = false;
+        singleTouchEditing = false;
     }
 
     private void clampPan() {
