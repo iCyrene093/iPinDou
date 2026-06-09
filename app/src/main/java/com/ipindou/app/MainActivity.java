@@ -680,15 +680,17 @@ public class MainActivity extends Activity {
     private void updateStats() {
         BeadPattern p = patternView.getPattern();
         if (p == null || stats == null) return;
+        BeadColor[] colors = BeadPalette.colors();
         int transparent = BeadPalette.transparentIndex();
-        int beadCount = p.nonTransparentCount();
+        int[] counts = colorCounts(p);
+        int emptyCount = counts[transparent];
+        int beadCount = p.width * p.height - emptyCount;
         StringBuilder s = new StringBuilder(String.format(Locale.US, "尺寸：%d x %d，共 %d 颗。用量：", p.width, p.height, beadCount));
-        for (int i = 0; i < BeadPalette.colors().length; i++) {
+        for (int i = 0; i < counts.length; i++) {
             if (i == transparent) continue;
-            int count = p.countOf(i);
-            if (count > 0) s.append(BeadPalette.colorAt(i).code).append('=').append(count).append(' ');
+            int count = counts[i];
+            if (count > 0) s.append(colors[i].code).append('=').append(count).append(' ');
         }
-        int emptyCount = p.countOf(transparent);
         if (emptyCount > 0) s.append("空格=").append(emptyCount);
         stats.setText(s.toString());
     }
