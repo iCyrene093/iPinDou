@@ -469,10 +469,14 @@ public class MainActivity extends Activity {
     }
 
     private void scheduleSizeRefresh() {
-        if (pendingSizeRefresh != null) mainHandler.removeCallbacks(pendingSizeRefresh);
+        if (pendingSizeRefresh != null) {
+            mainHandler.removeCallbacks(pendingSizeRefresh);
+            pendingSizeRefresh = null;
+        }
+        if (!isPatternSizeStale()) return;
         pendingSizeRefresh = () -> {
             pendingSizeRefresh = null;
-            refreshGeneratedPreview();
+            if (isPatternSizeStale()) refreshGeneratedPreview();
         };
         mainHandler.postDelayed(pendingSizeRefresh, SIZE_CHANGE_REFRESH_DELAY_MS);
     }
@@ -481,6 +485,18 @@ public class MainActivity extends Activity {
         return widthInput != null && heightInput != null
                 && widthInput.getText().toString().trim().length() > 0
                 && heightInput.getText().toString().trim().length() > 0;
+    }
+
+    private boolean isPatternSizeStale() {
+        if (patternView == null || !hasCompleteSizeInput()) return false;
+        BeadPattern pattern = patternView.getPattern();
+        if (pattern == null) return false;
+        int w = parseSize(widthInput, DEFAULT_PATTERN_SIZE), h = parseSize(heightInput, DEFAULT_PATTERN_SIZE);
+        return pattern.width != w || pattern.height != h;
+    }
+
+    private boolean isSizeRefreshRequiredBeforeSave() {
+        return pendingSizeRefresh != null || !hasCompleteSizeInput() || isPatternSizeStale();
     }
 
     private boolean hasSourceBitmap() {
@@ -524,6 +540,10 @@ public class MainActivity extends Activity {
     }
 
     private void saveCurrentPattern(String successPrefix) {
+        if (isSizeRefreshRequiredBeforeSave()) {
+            showError("图纸正在按新尺寸重新生成，请稍后再保存");
+            return;
+        }
         if (!hasWritePermission()) {
             pendingSaveMessage = successPrefix;
             requestPermissions(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, WRITE_STORAGE);
